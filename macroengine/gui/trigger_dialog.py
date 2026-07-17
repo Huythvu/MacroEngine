@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -34,6 +35,7 @@ from ..models.trigger import (
     Trigger,
 )
 from ..vision import capture, detector
+from .imaging import pixmap_from_png
 from .key_capture import KeyCaptureEdit
 from .region_selector import RegionSelector
 
@@ -79,14 +81,21 @@ class TriggerDialog(QDialog):
         # Template group.
         self._template_png = self._trigger.template_png
         self._template_status = QLabel(self._template_text())
+        self._tpl_thumb = QLabel()
+        self._tpl_thumb.setFixedSize(56, 56)
+        self._tpl_thumb.setAlignment(Qt.AlignCenter)
+        self._refresh_tpl_thumb()
         btn_capture = QPushButton("Capture Snapshot from Region")
         btn_capture.clicked.connect(self._capture_template)
         self._match_threshold = _spin(0.0, 1.0, self._trigger.match_threshold, 0.05, 2)
+        cap_row = QHBoxLayout()
+        cap_row.addWidget(self._tpl_thumb)
+        cap_row.addWidget(btn_capture, 1)
         tpl_form = QFormLayout()
         tpl_form.addRow(self._template_status)
-        tpl_form.addRow(btn_capture)
+        tpl_form.addRow(_wrap(cap_row))
         tpl_form.addRow("Match threshold:", self._match_threshold)
-        self._template_group = QGroupBox("Template settings")
+        self._template_group = QGroupBox("Template settings — the reference image")
         self._template_group.setLayout(tpl_form)
 
         # Color group.
@@ -112,6 +121,25 @@ class TriggerDialog(QDialog):
 
         # Condition.
         self._condition = QComboBox()
+
+        # Live preview & test (grabs the region now and evaluates the condition).
+        self._preview = QLabel("(no preview)")
+        self._preview.setMinimumSize(180, 90)
+        self._preview.setAlignment(Qt.AlignCenter)
+        self._preview.setStyleSheet("border: 1px solid palette(mid);")
+        self._test_label = QLabel("—")
+        self._test_label.setWordWrap(True)
+        btn_test = QPushButton("Test now")
+        btn_test.clicked.connect(self._test)
+        pv_side = QVBoxLayout()
+        pv_side.addWidget(btn_test)
+        pv_side.addWidget(self._test_label, 1)
+        pv_side.addStretch(1)
+        pv_row = QHBoxLayout()
+        pv_row.addWidget(self._preview)
+        pv_row.addLayout(pv_side, 1)
+        self._preview_group = QGroupBox("Live preview & test")
+        self._preview_group.setLayout(pv_row)
 
         # Action.
         self._action = QComboBox()
@@ -141,6 +169,7 @@ class TriggerDialog(QDialog):
         form.addRow(self._template_group)
         form.addRow(self._color_group)
         form.addRow("Condition:", self._condition)
+        form.addRow(self._preview_group)
         form.addRow("Action:", self._action)
         form.addRow(self._action_key_row)
         form.addRow(self._action_macro_row)
@@ -164,6 +193,13 @@ class TriggerDialog(QDialog):
     def _template_text(self) -> str:
         return "Snapshot: set ✓" if self._template_png else "Snapshot: (none)"
 
+    def _refresh_tpl_thumb(self) -> None:
+        pm = pixmap_from_png(self._template_png, 54)
+        if pm.isNull():
+            self._tpl_thumb.setText("(none)")
+        else:
+            self._tpl_thumb.setPixmap(pm)
+
     def _select_region(self) -> None:
         sel = RegionSelector(self)
         if sel.exec() and sel.region:
@@ -175,8 +211,45 @@ class TriggerDialog(QDialog):
             image = capture.grab_region(self._region)
             self._template_png = detector.encode_png(image)
             self._template_status.setText(self._template_text())
+            self._refresh_tpl_thumb()
+            self._test()
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Capture failed", str(exc))
+
+    def _test(self) -> None:
+        """Grab the region now, show it, and report whether the condition fires."""
+        try:
+            image = capture.grab_region(self._region)
+        except Exception as exc:  # noqa: BLE001
+            self._test_label.setText(f"error: {exc}")
+            return
+        try:
+            self._preview.setPixmap(pixmap_from_png(detector.encode_png(image), 180))
+        except Exception:  # noqa: BLE001
+            pass
+        if self._detection.currentData() == DETECT_TEMPLATE:
+            if not self._template_png:
+                self._test_label.setText("Capture a snapshot first")
+                return
+            present, score = detector.template_present(
+                image, self._template_png, self._match_threshold.value()
+            )
+            cond = self._condition.currentData()
+            met = present if cond == COND_PRESENT else (not present)
+            state = "present" if present else "absent"
+            self._test_label.setText(
+                f"reference {state} (score {score:.2f}) → {'FIRE' if met else 'no'}"
+            )
+        else:
+            ratio = detector.color_ratio(
+                image,
+                (self._h_lo.value(), self._s_lo.value(), self._v_lo.value()),
+                (self._h_hi.value(), self._s_hi.value(), self._v_hi.value()),
+            )
+            cond = self._condition.currentData()
+            met = ratio > self._ratio_threshold.value() if cond == COND_RATIO_ABOVE \
+                else ratio < self._ratio_threshold.value()
+            self._test_label.setText(f"match ratio {ratio:.2f} → {'FIRE' if met else 'no'}")
 
     def _browse_macro(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

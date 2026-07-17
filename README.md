@@ -125,8 +125,13 @@ manually: `python tools/make_icon.py assets/icon_source.png`. See `assets/README
 1. In the panel click **Add Trigger**.
 2. **Select Region…** and drag a rectangle over the area to watch (e.g. the HP bar).
 3. Choose detection:
-   - *Template* → **Capture Snapshot from Region**, then pick **absent**/**present**.
+   - *Template* → **Capture Snapshot from Region** (a **thumbnail of the captured
+     reference** appears), then pick **absent**/**present**.
    - *Color* → set the HSV band + ratio threshold and **above**/**below**.
+   Use **Test now** in the *Live preview & test* box to grab the region right now —
+   it shows the live image and reports whether the condition fires (present/absent +
+   match score for template, or the color match ratio) so you can confirm before
+   relying on it.
 4. Choose the action (press a key/combo, or run a macro) and a cooldown. The key
    field has a **Capture** button — press the actual key/combo (incl. Esc, Alt,
    Ctrl+C…) instead of typing its name.

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -37,17 +37,9 @@ from ..models.trigger import (
     COND_PRESENT,
 )
 from ..vision import capture, detector
+from .imaging import pixmap_from_png
 from .key_capture import KeyCaptureEdit
 from .region_selector import RegionSelector
-
-
-def pixmap_from_png(png: Optional[bytes], size: int = 48) -> QPixmap:
-    pm = QPixmap()
-    if png:
-        pm.loadFromData(png, "PNG")
-    if not pm.isNull():
-        pm = pm.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-    return pm
 
 
 class BuffItemDialog(QDialog):
