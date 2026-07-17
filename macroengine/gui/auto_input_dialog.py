@@ -5,29 +5,20 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
-    QFileDialog,
     QFormLayout,
-    QHBoxLayout,
-    QLabel,
     QLineEdit,
-    QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 
-from ..models.autoinput import (
-    AUTO_CLICK,
-    AUTO_PRESS_KEY,
-    AUTO_RUN_MACRO,
-    AUTO_TYPE_TEXT,
-    AutoInput,
-)
-from .key_capture import KeyCaptureEdit
-from .region_selector import PointPicker
+from ..models import actions
+from ..models.autoinput import AutoInput
+from .action_widget import ActionWidget
+
+# Auto inputs have no reference template, so no click-on-match.
+_AUTO_ACTIONS = (actions.PRESS_KEY, actions.TYPE_TEXT, actions.CLICK_AT, actions.RUN_MACRO)
 
 
 class AutoInputDialog(QDialog):
@@ -35,46 +26,18 @@ class AutoInputDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Auto Input")
         self._auto = auto or AutoInput()
-        self._x, self._y, self._button = self._auto.x, self._auto.y, self._auto.button
 
         self._name = QLineEdit(self._auto.name)
-
-        self._action = QComboBox()
-        self._action.addItem("Press key / combo", AUTO_PRESS_KEY)
-        self._action.addItem("Type text", AUTO_TYPE_TEXT)
-        self._action.addItem("Click at position", AUTO_CLICK)
-        self._action.addItem("Run macro", AUTO_RUN_MACRO)
-        self._action.setCurrentIndex(
-            {AUTO_PRESS_KEY: 0, AUTO_TYPE_TEXT: 1, AUTO_CLICK: 2, AUTO_RUN_MACRO: 3}.get(
-                self._auto.action, 0
-            )
+        self._action_widget = ActionWidget(
+            allowed=_AUTO_ACTIONS,
+            action=self._auto.action,
+            key=self._auto.key,
+            text=self._auto.text,
+            x=self._auto.x,
+            y=self._auto.y,
+            button=self._auto.button,
+            macro_path=self._auto.macro_path,
         )
-        self._action.currentIndexChanged.connect(self._sync)
-
-        # press key / combo
-        self._key = KeyCaptureEdit(self._auto.key)
-
-        # type text
-        self._text = QLineEdit(self._auto.text)
-        self._text.setPlaceholderText("text to type, e.g. 123asd")
-
-        # click
-        self._pos_label = QLabel(self._pos_text())
-        btn_pick = QPushButton("Pick on screen…")
-        btn_pick.clicked.connect(self._pick)
-        pos_row = QHBoxLayout()
-        pos_row.addWidget(self._pos_label, 1)
-        pos_row.addWidget(btn_pick)
-        self._pos_widget = _wrap(pos_row)
-
-        # run macro
-        self._macro = QLineEdit(self._auto.macro_path)
-        btn_browse = QPushButton("Browse…")
-        btn_browse.clicked.connect(self._browse)
-        macro_row = QHBoxLayout()
-        macro_row.addWidget(self._macro, 1)
-        macro_row.addWidget(btn_browse)
-        self._macro_widget = _wrap(macro_row)
 
         self._interval = QDoubleSpinBox()
         self._interval.setRange(0.01, 3600.0)
@@ -91,15 +54,6 @@ class AutoInputDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("Name:", self._name)
-        form.addRow("Action:", self._action)
-        self._key_label = QLabel("Key:")
-        form.addRow(self._key_label, self._key)
-        self._text_label = QLabel("Text:")
-        form.addRow(self._text_label, self._text)
-        self._pos_form_label = QLabel("Position:")
-        form.addRow(self._pos_form_label, self._pos_widget)
-        self._macro_form_label = QLabel("Macro:")
-        form.addRow(self._macro_form_label, self._macro_widget)
         form.addRow("Interval (s):", self._interval)
         form.addRow("Jitter ± (s):", self._jitter)
 
@@ -108,58 +62,19 @@ class AutoInputDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         root = QVBoxLayout(self)
+        root.addWidget(self._action_widget)
         root.addLayout(form)
         root.addWidget(buttons)
-        self._sync()
-
-    def _pos_text(self) -> str:
-        return f"{self._button}-click at ({self._x}, {self._y})"
-
-    def _pick(self) -> None:
-        picker = PointPicker(self)
-        if picker.exec() and picker.point is not None:
-            self._x, self._y = picker.point
-            self._button = picker.button
-            self._pos_label.setText(self._pos_text())
-
-    def _browse(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select macro", "", "Macro files (*.json);;All files (*)"
-        )
-        if path:
-            self._macro.setText(path)
-
-    def _sync(self) -> None:
-        action = self._action.currentData()
-        is_key = action == AUTO_PRESS_KEY
-        is_text = action == AUTO_TYPE_TEXT
-        is_click = action == AUTO_CLICK
-        is_macro = action == AUTO_RUN_MACRO
-        self._key_label.setVisible(is_key)
-        self._key.setVisible(is_key)
-        self._text_label.setVisible(is_text)
-        self._text.setVisible(is_text)
-        self._pos_form_label.setVisible(is_click)
-        self._pos_widget.setVisible(is_click)
-        self._macro_form_label.setVisible(is_macro)
-        self._macro_widget.setVisible(is_macro)
 
     def get_auto(self) -> AutoInput:
         a = self._auto
         a.name = self._name.text() or "Auto input"
-        a.action = self._action.currentData()
-        a.key = self._key.keystroke() or "1"
-        a.text = self._text.text()
-        a.x, a.y, a.button = self._x, self._y, self._button
-        a.macro_path = self._macro.text()
+        v = self._action_widget.values()
+        a.action = v["action"]
+        a.key = v["key"]
+        a.text = v["text"]
+        a.x, a.y, a.button = v["x"], v["y"], v["button"]
+        a.macro_path = v["macro_path"]
         a.interval_s = float(self._interval.value())
         a.jitter_s = float(self._jitter.value())
         return a
-
-
-# TODO(audit): duplicated helper — see note in trigger_dialog.py (gui/util.py).
-def _wrap(layout) -> QWidget:
-    w = QWidget()
-    layout.setContentsMargins(0, 0, 0, 0)
-    w.setLayout(layout)
-    return w

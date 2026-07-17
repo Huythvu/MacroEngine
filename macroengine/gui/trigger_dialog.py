@@ -1,8 +1,7 @@
 """Dialog to create or edit a single vision :class:`Trigger`.
 
-The vision half (region/detection/capture/preview/test) lives in the shared
-:class:`ConditionWidget`; this dialog adds the trigger's name, action, and
-cooldown.
+Composed from the shared building blocks: :class:`ConditionWidget` (the vision
+half) and :class:`ActionWidget` (what to do when it fires).
 """
 
 from __future__ import annotations
@@ -10,30 +9,19 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
-    QFileDialog,
     QFormLayout,
-    QHBoxLayout,
-    QLabel,
     QLineEdit,
     QMessageBox,
-    QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 
-from ..models.trigger import (
-    ACTION_CLICK_MATCH,
-    ACTION_PRESS_KEY,
-    ACTION_RUN_MACRO,
-    DETECT_TEMPLATE,
-    Trigger,
-)
-from .condition_widget import ConditionWidget, _wrap
-from .key_capture import KeyCaptureEdit
+from ..models import actions
+from ..models.trigger import DETECT_TEMPLATE, Trigger
+from .action_widget import ActionWidget
+from .condition_widget import ConditionWidget
 
 
 class TriggerDialog(QDialog):
@@ -44,22 +32,16 @@ class TriggerDialog(QDialog):
 
         self._name = QLineEdit(self._trigger.name)
         self._condition_widget = ConditionWidget(self._trigger)
-
-        # Action.
-        self._action = QComboBox()
-        self._action.addItem("Press key", ACTION_PRESS_KEY)
-        self._action.addItem("Run macro", ACTION_RUN_MACRO)
-        self._action.addItem("Click on the found image", ACTION_CLICK_MATCH)
-        idx = self._action.findData(self._trigger.action)
-        self._action.setCurrentIndex(max(0, idx))
-        self._action.currentIndexChanged.connect(self._sync_action)
-        self._action_key = KeyCaptureEdit(self._trigger.action_key)
-        self._action_macro = QLineEdit(self._trigger.action_macro_path)
-        btn_browse = QPushButton("Browse…")
-        btn_browse.clicked.connect(self._browse_macro)
-        macro_row = QHBoxLayout()
-        macro_row.addWidget(self._action_macro, 1)
-        macro_row.addWidget(btn_browse)
+        self._action_widget = ActionWidget(
+            allowed=actions.ALL_ACTIONS,
+            action=self._trigger.action,
+            key=self._trigger.action_key,
+            text=self._trigger.action_text,
+            x=self._trigger.action_x,
+            y=self._trigger.action_y,
+            button=self._trigger.action_button,
+            macro_path=self._trigger.action_macro_path,
+        )
 
         self._cooldown = QDoubleSpinBox()
         self._cooldown.setRange(0.0, 3600.0)
@@ -69,12 +51,6 @@ class TriggerDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("Name:", self._name)
-        form.addRow("Action:", self._action)
-        self._key_label = QLabel("Key:")
-        form.addRow(self._key_label, self._action_key)
-        self._macro_label = QLabel("Macro:")
-        self._macro_widget = _wrap(macro_row)
-        form.addRow(self._macro_label, self._macro_widget)
         form.addRow("Cooldown (s):", self._cooldown)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -83,25 +59,9 @@ class TriggerDialog(QDialog):
 
         root = QVBoxLayout(self)
         root.addWidget(self._condition_widget)
+        root.addWidget(self._action_widget)
         root.addLayout(form)
         root.addWidget(buttons)
-        self._sync_action()
-
-    def _sync_action(self) -> None:
-        action = self._action.currentData()
-        is_key = action == ACTION_PRESS_KEY
-        is_macro = action == ACTION_RUN_MACRO
-        self._key_label.setVisible(is_key)
-        self._action_key.setVisible(is_key)
-        self._macro_label.setVisible(is_macro)
-        self._macro_widget.setVisible(is_macro)
-
-    def _browse_macro(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select macro", "", "Macro files (*.json);;All files (*)"
-        )
-        if path:
-            self._action_macro.setText(path)
 
     def _accept(self) -> None:
         if (
@@ -114,7 +74,7 @@ class TriggerDialog(QDialog):
             )
             return
         if (
-            self._action.currentData() == ACTION_CLICK_MATCH
+            self._action_widget.action == actions.CLICK_MATCH
             and self._condition_widget.detection_kind != DETECT_TEMPLATE
         ):
             QMessageBox.warning(
@@ -129,8 +89,11 @@ class TriggerDialog(QDialog):
         t = self._trigger
         t.name = self._name.text() or "Trigger"
         self._condition_widget.apply_to(t)
-        t.action = self._action.currentData()
-        t.action_key = self._action_key.keystroke() or "1"
-        t.action_macro_path = self._action_macro.text()
+        v = self._action_widget.values()
+        t.action = v["action"]
+        t.action_key = v["key"]
+        t.action_text = v["text"]
+        t.action_x, t.action_y, t.action_button = v["x"], v["y"], v["button"]
+        t.action_macro_path = v["macro_path"]
         t.cooldown_s = float(self._cooldown.value())
         return t

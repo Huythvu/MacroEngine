@@ -38,6 +38,7 @@ from ..models.trigger import (
 from ..vision import capture, detector
 from .imaging import pixmap_from_png
 from .region_selector import RegionSelector
+from .util import wrap
 
 
 def _spin(minimum, maximum, value, step=1, decimals=None) -> QWidget:
@@ -50,13 +51,6 @@ def _spin(minimum, maximum, value, step=1, decimals=None) -> QWidget:
     box.setRange(minimum, maximum)
     box.setValue(value)
     return box
-
-
-def _wrap(layout) -> QWidget:
-    w = QWidget()
-    layout.setContentsMargins(0, 0, 0, 0)
-    w.setLayout(layout)
-    return w
 
 
 class ConditionWidget(QWidget):

@@ -51,14 +51,7 @@ from .buff_group_dialog import BuffGroupDialog
 from .macro_table import MacroTableModel, MacroTableView
 from .routine_panel import RoutinePanel
 from .trigger_dialog import TriggerDialog
-
-
-def _intro(text: str) -> QLabel:
-    """A small muted, wrapped one-line explainer shown at the top of a tab."""
-    label = QLabel(text)
-    label.setWordWrap(True)
-    label.setStyleSheet("color: palette(mid); padding: 2px 0 6px 0;")
-    return label
+from .util import intro
 
 
 class _Bridge(QObject):
@@ -152,7 +145,7 @@ class MainWindow(QMainWindow):
 
         recorder_tab = QWidget()
         recorder_layout = QVBoxLayout(recorder_tab)
-        recorder_layout.addWidget(_intro(
+        recorder_layout.addWidget(intro(
             "Record keyboard &amp; mouse into a macro, then replay it (looped if you "
             "like). Edit the steps in the table; <b>Save to library</b> to reuse it in "
             "routines. Saved macros are on the left."
@@ -273,7 +266,7 @@ class MainWindow(QMainWindow):
     def _build_triggers_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.addWidget(_intro(
+        layout.addWidget(intro(
             "Standalone screen automation. <b>Triggers &amp; buff groups</b> watch a "
             "region and press a key (or click the found image) when a condition holds; "
             "<b>auto inputs</b> repeat a key/click on a timer. Toggle 'Start monitoring' "

@@ -31,7 +31,8 @@ from ..models.routine import (
 from ..models.macro import Macro
 from ..models.trigger import DETECT_TEMPLATE
 from ..paths import macros_dir
-from .condition_widget import ConditionWidget, _wrap
+from .condition_widget import ConditionWidget
+from .util import wrap
 
 
 class MacroStepDialog(QDialog):
@@ -70,7 +71,7 @@ class MacroStepDialog(QDialog):
         form = QFormLayout()
         form.addRow("Name:", self._name)
         form.addRow("From library:", self._library)
-        form.addRow("Macro file:", _wrap(path_row))
+        form.addRow("Macro file:", wrap(path_row))
         form.addRow("Loops:", self._loops)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)

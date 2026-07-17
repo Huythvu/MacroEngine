@@ -29,17 +29,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..models import actions
 from ..models.buff import BuffGroup, BuffItem
-from ..models.trigger import (
-    ACTION_PRESS_KEY,
-    ACTION_RUN_MACRO,
-    COND_ABSENT,
-    COND_PRESENT,
-)
+from ..models.trigger import COND_ABSENT, COND_PRESENT
 from ..vision import capture, detector
+from .action_widget import ActionWidget
 from .imaging import pixmap_from_png
-from .key_capture import KeyCaptureEdit
 from .region_selector import RegionSelector
+from .util import wrap
 
 
 class BuffItemDialog(QDialog):
@@ -81,20 +78,17 @@ class BuffItemDialog(QDialog):
         self._threshold.setDecimals(2)
         self._threshold.setValue(self._item.match_threshold)
 
-        self._action = QComboBox()
-        self._action.addItem("Press key", ACTION_PRESS_KEY)
-        self._action.addItem("Run macro", ACTION_RUN_MACRO)
-        self._action.setCurrentIndex(0 if self._item.action == ACTION_PRESS_KEY else 1)
-        self._action.currentIndexChanged.connect(self._sync)
-        self._action_key = KeyCaptureEdit(self._item.action_key)
-        self._action_macro = QLineEdit(self._item.action_macro_path)
-        btn_browse = QPushButton("Browse…")
-        btn_browse.clicked.connect(self._browse_macro)
-        macro_row = QHBoxLayout()
-        macro_row.addWidget(self._action_macro, 1)
-        macro_row.addWidget(btn_browse)
-        self._macro_widget = QWidget()
-        self._macro_widget.setLayout(macro_row)
+        # click-on-match is available because a buff item always has a template.
+        self._action_widget = ActionWidget(
+            allowed=actions.ALL_ACTIONS,
+            action=self._item.action,
+            key=self._item.action_key,
+            text=self._item.action_text,
+            x=self._item.action_x,
+            y=self._item.action_y,
+            button=self._item.action_button,
+            macro_path=self._item.action_macro_path,
+        )
 
         self._cooldown = QDoubleSpinBox()
         self._cooldown.setRange(0.0, 3600.0)
@@ -112,16 +106,11 @@ class BuffItemDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("Name:", self._name)
-        form.addRow("Reference:", _wrap(cap_row))
+        form.addRow("Reference:", wrap(cap_row))
         form.addRow("Condition:", self._condition)
         form.addRow("Match threshold:", self._threshold)
-        form.addRow("Action:", self._action)
-        self._key_row_label = QLabel("Key:")
-        form.addRow(self._key_row_label, self._action_key)
-        self._macro_row_label = QLabel("Macro:")
-        form.addRow(self._macro_row_label, self._macro_widget)
         form.addRow("Cooldown (s):", self._cooldown)
-        form.addRow("Test:", _wrap(test_row))
+        form.addRow("Test:", wrap(test_row))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._accept)
@@ -129,8 +118,8 @@ class BuffItemDialog(QDialog):
 
         root = QVBoxLayout(self)
         root.addLayout(form)
+        root.addWidget(self._action_widget)
         root.addWidget(buttons)
-        self._sync()
 
     # -- helpers ------------------------------------------------------------
     def _refresh_thumb(self) -> None:
@@ -151,20 +140,6 @@ class BuffItemDialog(QDialog):
             self._test()
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Capture failed", str(exc))
-
-    def _browse_macro(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select macro", "", "Macro files (*.json);;All files (*)"
-        )
-        if path:
-            self._action_macro.setText(path)
-
-    def _sync(self) -> None:
-        is_key = self._action.currentData() == ACTION_PRESS_KEY
-        self._key_row_label.setVisible(is_key)
-        self._action_key.setVisible(is_key)
-        self._macro_row_label.setVisible(not is_key)
-        self._macro_widget.setVisible(not is_key)
 
     def _test(self) -> None:
         if not self._template_png:
@@ -193,9 +168,12 @@ class BuffItemDialog(QDialog):
         it.template_png = self._template_png
         it.match_threshold = float(self._threshold.value())
         it.condition = self._condition.currentData()
-        it.action = self._action.currentData()
-        it.action_key = self._action_key.keystroke() or "1"
-        it.action_macro_path = self._action_macro.text()
+        v = self._action_widget.values()
+        it.action = v["action"]
+        it.action_key = v["key"]
+        it.action_text = v["text"]
+        it.action_x, it.action_y, it.action_button = v["x"], v["y"], v["button"]
+        it.action_macro_path = v["macro_path"]
         it.cooldown_s = float(self._cooldown.value())
         return it
 
@@ -236,7 +214,7 @@ class BuffGroupDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("Name:", self._name)
-        form.addRow("Region:", _wrap(region_row))
+        form.addRow("Region:", wrap(region_row))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -325,10 +303,3 @@ class BuffGroupDialog(QDialog):
         g.items = self._items
         return g
 
-
-# TODO(audit): duplicated helper — see note in trigger_dialog.py (gui/util.py).
-def _wrap(layout) -> QWidget:
-    w = QWidget()
-    layout.setContentsMargins(0, 0, 0, 0)
-    w.setLayout(layout)
-    return w

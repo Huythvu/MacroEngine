@@ -18,17 +18,16 @@ from pynput import keyboard, mouse
 
 from ..core import keyspec
 from ..core.player import Player
+from ..models import actions
 from ..models.buff import BuffGroup
 from ..models.macro import Macro
-from ..models.trigger import (
-    ACTION_CLICK_MATCH,
-    ACTION_PRESS_KEY,
-    ACTION_RUN_MACRO,
-    Trigger,
-)
+from ..models.trigger import Trigger
 from . import capture, detector
 
 DEFAULT_POLL_INTERVAL = 0.15
+
+# Sentinel: a click-on-match action whose reference is not on screen right now.
+_NO_CLICK = object()
 
 
 class Monitor:
@@ -100,23 +99,11 @@ class Monitor:
         image = capture.grab_region(trig.region)
         if not detector.condition_met(trig, image):
             return
-        # For click-on-match, locate the reference in the already-captured frame
-        # so we click exactly what the condition just saw.
-        click_pos = None
-        if trig.action == ACTION_CLICK_MATCH:
-            if not trig.template_png:
-                return
-            score, box = detector.template_locate(
-                image, detector.decode_png(trig.template_png)
-            )
-            if score < trig.match_threshold:
-                return  # condition fired but there is nothing on screen to click
-            click_pos = detector.match_screen_center(trig.region, box)
+        click_pos = self._locate_for_click(trig, image, trig.region)
+        if click_pos is _NO_CLICK:
+            return  # click_match requested but nothing on screen to click
         if self._cooldown_ok(id(trig), trig.cooldown_s):
-            self._do_action(
-                trig.action, trig.action_key, trig.action_macro_path, trig.name,
-                click_pos=click_pos,
-            )
+            self._do_action(trig, trig.name, click_pos=click_pos)
 
     def _evaluate_group(self, group: BuffGroup) -> None:
         # Capture the shared bar region once, then test every buff icon against it.
@@ -127,9 +114,30 @@ class Monitor:
             met, _score, _present = detector.buff_item_met(item, image)
             if not met:
                 continue
+            click_pos = self._locate_for_click(item, image, group.region)
+            if click_pos is _NO_CLICK:
+                continue
             if self._cooldown_ok(id(item), item.cooldown_s):
-                label = f"{group.name}/{item.name}"
-                self._do_action(item.action, item.action_key, item.action_macro_path, label)
+                self._do_action(item, f"{group.name}/{item.name}", click_pos=click_pos)
+
+    def _locate_for_click(self, obj, image, region):
+        """For click-on-match actions, locate the reference in the frame the
+        condition just evaluated so we click exactly what it saw.
+
+        Returns the screen position, ``None`` (no click needed), or the
+        ``_NO_CLICK`` sentinel when a click was requested but the reference
+        is not actually on screen.
+        """
+        if obj.action != actions.CLICK_MATCH:
+            return None
+        if not obj.template_png:
+            return _NO_CLICK
+        score, box = detector.template_locate(
+            image, detector.decode_png(obj.template_png)
+        )
+        if score < obj.match_threshold:
+            return _NO_CLICK
+        return detector.match_screen_center(region, box)
 
     # TODO(audit): _last_fire is keyed by id(obj); CPython can reuse ids after
     # GC and replacing an item on edit silently resets its cooldown. Use a
@@ -141,24 +149,32 @@ class Monitor:
         self._last_fire[key] = now
         return True
 
-    def _do_action(
-        self, action: str, key: str, macro_path: str, label: str, click_pos=None
-    ) -> None:
-        if action == ACTION_PRESS_KEY:
-            keyspec.press_keystroke(self._kbd, key)
-        elif action == ACTION_CLICK_MATCH:
+    def _do_action(self, obj, label: str, click_pos=None) -> None:
+        """Perform ``obj``'s action (shared vocabulary — Trigger or BuffItem)."""
+        action = obj.action
+        if action == actions.PRESS_KEY:
+            keyspec.press_keystroke(self._kbd, obj.action_key)
+        elif action == actions.TYPE_TEXT:
+            keyspec.type_text(self._kbd, obj.action_text)
+        elif action == actions.CLICK_AT:
+            self._click((obj.action_x, obj.action_y), obj.action_button)
+        elif action == actions.CLICK_MATCH:
             if click_pos is None:
                 return
-            self._mouse.position = click_pos
-            self._mouse.press(mouse.Button.left)
-            self._mouse.release(mouse.Button.left)
-        elif action == ACTION_RUN_MACRO:
-            if macro_path and not self._player.running:
+            self._click(click_pos, "left")
+        elif action == actions.RUN_MACRO:
+            if obj.action_macro_path and not self._player.running:
                 try:
-                    self._player.play(Macro.load(macro_path))
+                    self._player.play(Macro.load(obj.action_macro_path))
                 except Exception:
                     # TODO(audit): a missing/corrupt macro file fails silently
                     # every tick — log it and surface once in the status bar.
                     pass
         if self._on_fire is not None:
             self._on_fire(label)
+
+    def _click(self, pos, button_name: str) -> None:
+        self._mouse.position = pos
+        button = getattr(mouse.Button, button_name, mouse.Button.left)
+        self._mouse.press(button)
+        self._mouse.release(button)

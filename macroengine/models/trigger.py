@@ -24,10 +24,15 @@ COND_ABSENT = "absent"            # template: reference is NOT visible (e.g. buf
 COND_RATIO_ABOVE = "ratio_above"  # color: matched fraction > threshold (e.g. HP bar red)
 COND_RATIO_BELOW = "ratio_below"  # color: matched fraction < threshold
 
-# -- actions ----------------------------------------------------------------
-ACTION_PRESS_KEY = "press_key"      # tap a single key
-ACTION_RUN_MACRO = "run_macro"      # play a saved macro once
-ACTION_CLICK_MATCH = "click_match"  # click where the template was found (template mode)
+# -- actions (shared vocabulary; see models/actions.py) ----------------------
+from .actions import (  # noqa: E402  (re-exported under the historical names)
+    CLICK_AT as ACTION_CLICK_AT,
+    CLICK_MATCH as ACTION_CLICK_MATCH,
+    PRESS_KEY as ACTION_PRESS_KEY,
+    RUN_MACRO as ACTION_RUN_MACRO,
+    TYPE_TEXT as ACTION_TYPE_TEXT,
+    describe_action,
+)
 
 FILE_FORMAT = "macroengine.triggers"
 FILE_VERSION = 1
@@ -54,10 +59,14 @@ class Trigger:
     condition: str = COND_ABSENT
     ratio_threshold: float = 0.2  # used by ratio_above / ratio_below
 
-    # Action to perform, and how often it may fire.
+    # Action to perform (shared vocabulary), and how often it may fire.
     action: str = ACTION_PRESS_KEY
-    action_key: str = "1"           # for press_key
-    action_macro_path: str = ""     # for run_macro
+    action_key: str = "1"           # press_key: keystroke spec
+    action_text: str = ""           # type_text: literal string
+    action_x: int = 0               # click_at: fixed screen position
+    action_y: int = 0
+    action_button: str = "left"
+    action_macro_path: str = ""     # run_macro
     cooldown_s: float = 1.0
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,6 +85,10 @@ class Trigger:
             "ratio_threshold": self.ratio_threshold,
             "action": self.action,
             "action_key": self.action_key,
+            "action_text": self.action_text,
+            "action_x": self.action_x,
+            "action_y": self.action_y,
+            "action_button": self.action_button,
             "action_macro_path": self.action_macro_path,
             "cooldown_s": self.cooldown_s,
         }
@@ -96,6 +109,10 @@ class Trigger:
             ratio_threshold=float(raw.get("ratio_threshold", 0.2)),
             action=raw.get("action", ACTION_PRESS_KEY),
             action_key=raw.get("action_key", "1"),
+            action_text=raw.get("action_text", ""),
+            action_x=int(raw.get("action_x", 0)),
+            action_y=int(raw.get("action_y", 0)),
+            action_button=raw.get("action_button", "left"),
             action_macro_path=raw.get("action_macro_path", ""),
             cooldown_s=float(raw.get("cooldown_s", 1.0)),
         )
@@ -105,12 +122,11 @@ class Trigger:
             det = f"template {self.condition} (>= {self.match_threshold:.2f})"
         else:
             det = f"color {self.condition} {self.ratio_threshold:.2f}"
-        if self.action == ACTION_PRESS_KEY:
-            act = f"press '{self.action_key}'"
-        elif self.action == ACTION_CLICK_MATCH:
-            act = "click the found image"
-        else:
-            act = f"run {Path(self.action_macro_path).name or '<macro>'}"
+        act = describe_action(
+            self.action, key=self.action_key, text=self.action_text,
+            x=self.action_x, y=self.action_y, button=self.action_button,
+            macro_path=self.action_macro_path,
+        )
         return f"{det} -> {act}"
 
 
