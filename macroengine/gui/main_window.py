@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
-    QSplitter,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -45,6 +45,7 @@ from ..vision.monitor import Monitor
 from .auto_input_dialog import AutoInputDialog
 from .buff_group_dialog import BuffGroupDialog
 from .macro_table import MacroTableModel, MacroTableView
+from .routine_panel import RoutinePanel
 from .trigger_dialog import TriggerDialog
 
 
@@ -125,20 +126,22 @@ class MainWindow(QMainWindow):
         # Macro timeline.
         self._table = MacroTableView(self._model)
 
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        left_layout.addLayout(controls)
-        left_layout.addWidget(self._table)
+        recorder_tab = QWidget()
+        recorder_layout = QVBoxLayout(recorder_tab)
+        recorder_layout.addLayout(controls)
+        recorder_layout.addWidget(self._table)
 
-        # Triggers panel.
-        right = self._build_triggers_panel()
+        # Routine composer tab (chains saved macros with waits + vision checks).
+        self._routine_panel = RoutinePanel(status_cb=self._set_status)
 
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(left)
-        splitter.addWidget(right)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
-        self.setCentralWidget(splitter)
+        # Watchers & auto inputs tab.
+        watchers_tab = self._build_triggers_panel()
+
+        tabs = QTabWidget()
+        tabs.addTab(recorder_tab, "Recorder")
+        tabs.addTab(self._routine_panel, "Routine")
+        tabs.addTab(watchers_tab, "Watchers && Auto")
+        self.setCentralWidget(tabs)
 
     def _build_triggers_panel(self) -> QWidget:
         panel = QWidget()
@@ -196,6 +199,10 @@ class MainWindow(QMainWindow):
         m.addAction("New", self._new_macro)
         m.addAction("Open…", self._open_macro)
         m.addAction("Save As…", self._save_macro)
+        r = self.menuBar().addMenu("&Routine")
+        r.addAction("New", self._routine_panel.new_routine)
+        r.addAction("Open…", self._routine_panel.open_routine)
+        r.addAction("Save As…", self._routine_panel.save_routine)
         t = self.menuBar().addMenu("&Watchers")
         t.addAction("Open…", self._open_triggers)
         t.addAction("Save As…", self._save_triggers)
@@ -260,6 +267,8 @@ class MainWindow(QMainWindow):
             self._auto_runner = None
             self._btn_auto.setChecked(False)
             self._btn_auto.setText("Start auto inputs")
+        if self._routine_panel.running:
+            self._routine_panel.stop()
         self._set_status("Stopped")
 
     # -- triggers & buff groups ---------------------------------------------
@@ -475,6 +484,8 @@ class MainWindow(QMainWindow):
             self._monitor.stop()
         if self._auto_runner and self._auto_runner.running:
             self._auto_runner.stop()
+        if self._routine_panel.running:
+            self._routine_panel.stop()
         if self._recorder and self._recorder.running:
             self._recorder.stop()
         self._hotkeys.stop()

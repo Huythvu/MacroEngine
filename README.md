@@ -36,6 +36,9 @@ red, press the potion key."*
     (e.g. red); fire when the ratio goes **above**/**below** a threshold (HP low).
   - Action = press a key, or run a saved macro. Each trigger has a **cooldown** so it
     doesn't fire every poll tick.
+- **Routines** — chain small recorded macros into a full sequence (e.g. a daily):
+  play section A → wait → *wait until the screen shows X* → play section B, with
+  per-step vision timeouts, reordering, per-step enable, looping, and save/load.
 - **Buff groups** — watch one region (a buff bar) for **several buff icons at once**.
   Each icon is searched for *anywhere* in the region, so it keeps working even when
   buffs **shift or reorder** as they expire. Per buff: a captured icon, a
@@ -154,6 +157,24 @@ Best when your buff icons **shift/reorder** as buffs expire — each icon is mat
 
 Save/restore your triggers *and* buff groups together via **Watchers ▸ Save As… /
 Open…**.
+
+### Routines (chain small macros into a daily)
+Recording a whole daily in one take is hard — record **small sections** instead and
+chain them on the **Routine** tab:
+1. Record and save each section as its own macro (e.g. `walk-to-npc.json`,
+   `turn-in.json`).
+2. On the **Routine** tab, build the step list top-to-bottom:
+   - **+ Macro…** — play a saved macro file (optionally loop it ×N). Steps reference
+     the *file*, so re-recording a section automatically updates the routine.
+   - **+ Wait…** — pause N seconds (± jitter) before the next step.
+   - **+ Vision wait…** — poll a screen region until a condition holds (icon
+     present/absent or color ratio — same editor as vision triggers, including
+     capture, thumbnail, and **Test now**). Each has a **timeout** that either
+     **stops the routine** (it names the failing step) or **continues anyway**.
+3. Reorder with Move Up/Down, untick a step to skip it, set routine **Loops**
+   (0 = forever), then **Run routine**. The current step highlights while running;
+   `Esc` stops everything instantly.
+4. **Routine ▸ Save As… / Open…** stores the whole chain as a `.json`.
 
 ### Auto inputs (timed repeaters)
 An **auto-clicker / auto-presser**: fire a single action on a repeating timer,
