@@ -1,0 +1,4 @@
+# Extra tools for development / building the .exe
+-r requirements.txt
+pyinstaller>=6.0
+pytest>=7.0

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from ..models.event import KEY_DOWN, KEY_UP, MOUSE_CLICK, Event
 from ..models.macro import Macro
+from .region_selector import PointPicker
 
 _COLUMNS = ["#", "Type", "Details", "Delay (s)"]
 
@@ -122,7 +123,7 @@ class MacroTableView(QWidget):
         btn_up = QPushButton("Move Up")
         btn_down = QPushButton("Move Down")
         btn_key = QPushButton("Add Key Tap…")
-        btn_click = QPushButton("Add Click…")
+        btn_click = QPushButton("Add Click (pick on screen)…")
         btn_delete.clicked.connect(self._delete)
         btn_up.clicked.connect(lambda: self._move(-1))
         btn_down.clicked.connect(lambda: self._move(1))
@@ -169,21 +170,17 @@ class MacroTableView(QWidget):
         )
 
     def _add_click(self) -> None:
-        text, ok = QInputDialog.getText(
-            self, "Add Click", "x,y (screen coordinates):"
-        )
-        if not ok or "," not in text:
+        # Pick the position by clicking on screen rather than typing coordinates.
+        picker = PointPicker(self)
+        if not picker.exec() or picker.point is None:
             return
-        try:
-            xs, ys = text.split(",", 1)
-            x, y = int(xs.strip()), int(ys.strip())
-        except ValueError:
-            return
+        x, y = picker.point
+        button = picker.button
         at = self._current_row()
         self._model.insert_events(
             at,
             [
-                Event(type=MOUSE_CLICK, delay=0.05, data={"x": x, "y": y, "button": "left", "pressed": True}),
-                Event(type=MOUSE_CLICK, delay=0.05, data={"x": x, "y": y, "button": "left", "pressed": False}),
+                Event(type=MOUSE_CLICK, delay=0.05, data={"x": x, "y": y, "button": button, "pressed": True}),
+                Event(type=MOUSE_CLICK, delay=0.05, data={"x": x, "y": y, "button": button, "pressed": False}),
             ],
         )

@@ -30,6 +30,8 @@ red, press the potion key."*
     (e.g. red); fire when the ratio goes **above**/**below** a threshold (HP low).
   - Action = press a key, or run a saved macro. Each trigger has a **cooldown** so it
     doesn't fire every poll tick.
+- **No typing coordinates** — *Add Click* and region/trigger setup let you pick
+  positions by clicking directly on the screen.
 
 ## Global hotkeys
 
@@ -55,11 +57,30 @@ pip install -r requirements.txt
 python -m macroengine.main
 ```
 
+## Build a double-clickable `.exe` (no VS Code needed)
+
+On **Windows**, just **double-click `build_exe.bat`** (or run it from a terminal). It
+installs the dependencies, bundles everything with
+[PyInstaller](https://pyinstaller.org/), and produces a single file:
+
+```
+dist\MacroEngine.exe
+```
+
+Double-click that to launch the app — no Python or editor required. Right-click ▸
+**Run as administrator** if you need to control games that run elevated.
+
+> The `.exe` must be built **on Windows** — PyInstaller is not a cross-compiler, so it
+> can't be produced from macOS/Linux. Build it once per machine (or share the produced
+> `dist\MacroEngine.exe`).
+
 ### Recorder
 1. Set **Loops** (0 = forever) and optionally untick *Record mouse moves*.
 2. Click **Record** (or press `F9`), perform your inputs, then `F9` again to stop.
 3. Click **Play** (or `F10`) to replay. `Esc` stops immediately.
-4. Edit rows in the table; use **Macro ▸ Save As…** to keep it.
+4. Edit rows in the table — delete/reorder, edit a delay inline, **Add Key Tap…**, or
+   **Add Click (pick on screen)…** which lets you *click where you want the macro to
+   click* instead of typing coordinates. Use **Macro ▸ Save As…** to keep it.
 
 ### Vision triggers
 1. In the **Vision triggers** panel click **Add**.

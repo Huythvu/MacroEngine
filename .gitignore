@@ -6,5 +6,6 @@ venv/
 *.egg-info/
 build/
 dist/
+*.spec
 # Local user data
 *.macro.json
