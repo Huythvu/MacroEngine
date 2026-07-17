@@ -146,6 +146,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(QLabel("<b>Vision triggers &amp; buff groups</b>"))
 
         self._trigger_list = QListWidget()
+        self._trigger_list.itemChanged.connect(self._watcher_check_changed)
         layout.addWidget(self._trigger_list, 1)
 
         btns = QHBoxLayout()
@@ -169,6 +170,7 @@ class MainWindow(QMainWindow):
         # -- Auto inputs (timed repeaters) ----------------------------------
         layout.addWidget(QLabel("<b>Auto inputs (timed)</b>"))
         self._auto_list = QListWidget()
+        self._auto_list.itemChanged.connect(self._auto_check_changed)
         layout.addWidget(self._auto_list, 1)
 
         auto_btns = QHBoxLayout()
@@ -263,19 +265,31 @@ class MainWindow(QMainWindow):
     # -- triggers & buff groups ---------------------------------------------
     def _refresh_triggers(self) -> None:
         # List triggers first, then buff groups. self._rows keeps the row->object
-        # mapping so Edit/Remove can dispatch to the right dialog.
+        # mapping so Edit/Remove can dispatch to the right dialog. Rows are
+        # checkable: the checkbox is the item's enabled flag, and the runners
+        # re-check it every tick, so toggling takes effect live.
+        self._trigger_list.blockSignals(True)
         self._trigger_list.clear()
         self._rows: List[tuple] = []
         for t in self._triggers:
-            self._trigger_list.addItem(
-                QListWidgetItem(f"{'●' if t.enabled else '○'} [trigger] {t.name} — {t.describe()}")
-            )
+            self._add_checkable(self._trigger_list, f"[trigger] {t.name} — {t.describe()}", t.enabled)
             self._rows.append(("trigger", t))
         for g in self._groups:
-            self._trigger_list.addItem(
-                QListWidgetItem(f"{'●' if g.enabled else '○'} [buffs] {g.describe()}")
-            )
+            self._add_checkable(self._trigger_list, f"[buffs] {g.describe()}", g.enabled)
             self._rows.append(("group", g))
+        self._trigger_list.blockSignals(False)
+
+    @staticmethod
+    def _add_checkable(list_widget: QListWidget, text: str, enabled: bool) -> None:
+        item = QListWidgetItem(text)
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
+        list_widget.addItem(item)
+
+    def _watcher_check_changed(self, item: QListWidgetItem) -> None:
+        row = self._trigger_list.row(item)
+        if 0 <= row < len(self._rows):
+            self._rows[row][1].enabled = item.checkState() == Qt.Checked
 
     def _add_trigger(self) -> None:
         dlg = TriggerDialog(parent=self)
@@ -337,11 +351,16 @@ class MainWindow(QMainWindow):
 
     # -- auto inputs --------------------------------------------------------
     def _refresh_autos(self) -> None:
+        self._auto_list.blockSignals(True)
         self._auto_list.clear()
         for a in self._auto_inputs:
-            self._auto_list.addItem(
-                QListWidgetItem(f"{'●' if a.enabled else '○'} {a.describe()}")
-            )
+            self._add_checkable(self._auto_list, a.describe(), a.enabled)
+        self._auto_list.blockSignals(False)
+
+    def _auto_check_changed(self, item: QListWidgetItem) -> None:
+        row = self._auto_list.row(item)
+        if 0 <= row < len(self._auto_inputs):
+            self._auto_inputs[row].enabled = item.checkState() == Qt.Checked
 
     def _add_auto(self) -> None:
         dlg = AutoInputDialog(parent=self)

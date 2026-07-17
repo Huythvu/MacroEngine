@@ -226,6 +226,7 @@ class BuffGroupDialog(QDialog):
 
         self._list = QListWidget()
         self._list.setIconSize(QSize(32, 32))
+        self._list.itemChanged.connect(self._check_changed)
         self._refresh_list()
 
         btn_add = QPushButton("Add buff…")
@@ -268,6 +269,9 @@ class BuffGroupDialog(QDialog):
             self._region_label.setText(self._region_text())
 
     def _refresh_list(self, detections: Optional[dict] = None) -> None:
+        # Rows are checkable: the checkbox toggles the buff's enabled flag so a
+        # single buff can be paused without removing it from the group.
+        self._list.blockSignals(True)
         self._list.clear()
         for idx, it in enumerate(self._items):
             text = it.describe()
@@ -275,10 +279,18 @@ class BuffGroupDialog(QDialog):
                 present, score = detections[idx]
                 text += f"   [{'DETECTED ✓' if present else 'not found ✗'} {score:.2f}]"
             row = QListWidgetItem(text)
+            row.setFlags(row.flags() | Qt.ItemIsUserCheckable)
+            row.setCheckState(Qt.Checked if it.enabled else Qt.Unchecked)
             pm = pixmap_from_png(it.template_png, 32)
             if not pm.isNull():
                 row.setIcon(QIcon(pm))
             self._list.addItem(row)
+        self._list.blockSignals(False)
+
+    def _check_changed(self, row_item: QListWidgetItem) -> None:
+        row = self._list.row(row_item)
+        if 0 <= row < len(self._items):
+            self._items[row].enabled = row_item.checkState() == Qt.Checked
 
     def _add(self) -> None:
         dlg = BuffItemDialog(self._region, parent=self)

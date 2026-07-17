@@ -154,6 +154,10 @@ interval.
    robotic.
 4. Click **Start auto inputs**. `Esc` stops them (and everything else) instantly.
 
+Every list row (triggers, buff groups, individual buffs inside a group, auto inputs)
+has a **checkbox** — untick it to pause just that item without deleting it. Toggling
+works live, even while monitoring / auto inputs are running.
+
 ## Windows notes / caveats
 
 - **Run as Administrator** to record/inject input for games that run elevated —
