@@ -6,9 +6,11 @@ clicks) are driven by the buttons alongside the table.
 
 from __future__ import annotations
 
+import json
 from typing import List, Optional
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QMimeData, QModelIndex, Qt
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -26,6 +28,8 @@ from ..models.macro import Macro
 from .region_selector import PointPicker
 
 _COLUMNS = ["#", "Type", "Details", "Delay (s)"]
+# Clipboard format for pasting events back into the app (round-trips full data).
+_EVENTS_MIME = "application/x-macroengine-events"
 
 
 class MacroTableModel(QAbstractTableModel):
@@ -148,6 +152,15 @@ class MacroTableModel(QAbstractTableModel):
         self._rebuild()
         self.endResetModel()
 
+    def events_for_rows(self, rows: List[int]) -> List[Event]:
+        """Underlying events for the given display rows (groups expanded)."""
+        out: List[Event] = []
+        for r in sorted(set(rows)):
+            if 0 <= r < len(self._groups):
+                start, length = self._groups[r]
+                out.extend(self._events[start:start + length])
+        return out
+
 
 class MacroTableView(QWidget):
     def __init__(self, model: MacroTableModel, parent=None) -> None:
@@ -164,11 +177,21 @@ class MacroTableView(QWidget):
         btn_down = QPushButton("Move Down")
         btn_key = QPushButton("Add Key Tap…")
         btn_click = QPushButton("Add Click (pick on screen)…")
+        btn_copy = QPushButton("Copy")
+        btn_paste = QPushButton("Paste")
         btn_delete.clicked.connect(self._delete)
         btn_up.clicked.connect(lambda: self._move(-1))
         btn_down.clicked.connect(lambda: self._move(1))
         btn_key.clicked.connect(self._add_key)
         btn_click.clicked.connect(self._add_click)
+        btn_copy.clicked.connect(self._copy)
+        btn_paste.clicked.connect(self._paste)
+        btn_copy.setToolTip("Copy selected rows (Ctrl+C) — as text, and pasteable back in")
+        btn_paste.setToolTip("Paste copied events (Ctrl+V)")
+
+        # Standard clipboard shortcuts on the table.
+        QShortcut(QKeySequence.Copy, self._table, activated=self._copy)
+        QShortcut(QKeySequence.Paste, self._table, activated=self._paste)
 
         self._compact = QCheckBox("Compact view")
         self._compact.setChecked(model.compact)
@@ -179,7 +202,7 @@ class MacroTableView(QWidget):
         self._compact.toggled.connect(model.set_compact)
 
         buttons = QHBoxLayout()
-        for b in (btn_delete, btn_up, btn_down, btn_key, btn_click):
+        for b in (btn_delete, btn_up, btn_down, btn_key, btn_click, btn_copy, btn_paste):
             buttons.addWidget(b)
         buttons.addStretch(1)
         buttons.addWidget(self._compact)
@@ -194,6 +217,31 @@ class MacroTableView(QWidget):
     def _current_row(self) -> int:
         rows = self._selected_rows()
         return rows[0] if rows else self._model.rowCount()
+
+    def _copy(self) -> None:
+        events = self._model.events_for_rows(self._selected_rows())
+        if not events:
+            return
+        md = QMimeData()
+        # App format: full round-trippable data for pasting back in.
+        md.setData(_EVENTS_MIME, json.dumps([e.to_dict() for e in events]).encode("utf-8"))
+        # Plain text: human-readable, for pasting into any editor.
+        md.setText("\n".join(f"{e.describe()}\t{e.delay:.3f}s" for e in events))
+        QGuiApplication.clipboard().setMimeData(md)
+
+    def _paste(self) -> None:
+        md = QGuiApplication.clipboard().mimeData()
+        if not md.hasFormat(_EVENTS_MIME):
+            return
+        try:
+            raw = json.loads(bytes(md.data(_EVENTS_MIME)).decode("utf-8"))
+            events = [Event.from_dict(e) for e in raw]
+        except Exception:
+            return
+        # Insert after the current selection (or at the end if nothing selected).
+        rows = self._selected_rows()
+        at = rows[-1] + 1 if rows else self._model.rowCount()
+        self._model.insert_events(at, events)
 
     def _delete(self) -> None:
         self._model.delete_rows(self._selected_rows())

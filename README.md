@@ -117,7 +117,9 @@ manually: `python tools/make_icon.py assets/icon_source.png`. See `assets/README
 3. Click **Play** (or `F10`) to replay. `Esc` stops immediately.
 4. Edit rows in the table — delete/reorder, edit a delay inline, **Add Key Tap…**, or
    **Add Click (pick on screen)…** which lets you *click where you want the macro to
-   click* instead of typing coordinates. Use **Macro ▸ Save As…** to keep it.
+   click* instead of typing coordinates. Select rows and **Copy** (`Ctrl+C`) to copy
+   them — as readable text for any editor, and pasteable back in with **Paste**
+   (`Ctrl+V`) to duplicate steps. Use **Macro ▸ Save As…** to keep it.
 
 ### Vision triggers (single watcher)
 1. In the panel click **Add Trigger**.

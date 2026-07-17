@@ -29,6 +29,7 @@ echo Building MacroEngine.exe ...
 python -m PyInstaller --noconfirm --clean --onefile --windowed ^
     --name MacroEngine ^
     %ICON_ARG% ^
+    --add-data "assets;assets" ^
     --collect-submodules pynput ^
     --collect-submodules mss ^
     run.py
