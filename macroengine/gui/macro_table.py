@@ -11,6 +11,7 @@ from typing import List, Optional
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QHBoxLayout,
     QInputDialog,
     QPushButton,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..grouping import build_groups, group_describe, group_span_delay
 from ..models.event import KEY_DOWN, KEY_UP, MOUSE_CLICK, Event
 from ..models.macro import Macro
 from .region_selector import PointPicker
@@ -27,14 +29,34 @@ _COLUMNS = ["#", "Type", "Details", "Delay (s)"]
 
 
 class MacroTableModel(QAbstractTableModel):
+    """Renders the event list as *groups*. In compact mode, runs of same-kind
+    events (held-key repeats, mouse-move streams) collapse to one row; the
+    underlying events are never modified by grouping."""
+
     def __init__(self, macro: Optional[Macro] = None) -> None:
         super().__init__()
         self._events: List[Event] = macro.events if macro else []
+        self._compact = True
+        self._groups = build_groups(self._events, self._compact)
+
+    def _rebuild(self) -> None:
+        self._groups = build_groups(self._events, self._compact)
 
     def set_events(self, events: List[Event]) -> None:
         self.beginResetModel()
         self._events = events
+        self._rebuild()
         self.endResetModel()
+
+    def set_compact(self, compact: bool) -> None:
+        self.beginResetModel()
+        self._compact = compact
+        self._rebuild()
+        self.endResetModel()
+
+    @property
+    def compact(self) -> bool:
+        return self._compact
 
     @property
     def events(self) -> List[Event]:
@@ -42,7 +64,7 @@ class MacroTableModel(QAbstractTableModel):
 
     # -- Qt model interface -------------------------------------------------
     def rowCount(self, parent=QModelIndex()) -> int:
-        return 0 if parent.isValid() else len(self._events)
+        return 0 if parent.isValid() else len(self._groups)
 
     def columnCount(self, parent=QModelIndex()) -> int:
         return len(_COLUMNS)
@@ -55,58 +77,76 @@ class MacroTableModel(QAbstractTableModel):
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-        ev = self._events[index.row()]
+        start, length = self._groups[index.row()]
+        ev = self._events[start]
         col = index.column()
         if role in (Qt.DisplayRole, Qt.EditRole):
             if col == 0:
                 return index.row() + 1
             if col == 1:
-                return ev.type
+                return ("⊞ " if length > 1 else "") + ev.type
             if col == 2:
-                return ev.describe()
+                return group_describe(self._events, start, length)
             if col == 3:
-                return f"{ev.delay:.3f}" if role == Qt.DisplayRole else ev.delay
+                total = ev.delay if length == 1 else group_span_delay(self._events, start, length)
+                return f"{total:.3f}" if role == Qt.DisplayRole else total
         return None
 
     def flags(self, index):
         base = Qt.ItemIsEnabled | Qt.ItemIsSelectable
-        if index.column() == 3:  # delay is editable
+        # Delay is editable only for single-event rows (a group's delay is a total).
+        if index.column() == 3 and self._groups[index.row()][1] == 1:
             return base | Qt.ItemIsEditable
         return base
 
     def setData(self, index, value, role=Qt.EditRole) -> bool:
         if role != Qt.EditRole or index.column() != 3:
             return False
+        start, length = self._groups[index.row()]
+        if length != 1:
+            return False
         try:
             delay = max(0.0, float(value))
         except (TypeError, ValueError):
             return False
-        self._events[index.row()].delay = delay
+        self._events[start].delay = delay
         self.dataChanged.emit(index, index, [Qt.DisplayRole])
         return True
 
-    # -- structural edits ---------------------------------------------------
+    # -- structural edits (operate on whole display rows / spans) -----------
     def delete_rows(self, rows: List[int]) -> None:
-        for row in sorted(set(rows), reverse=True):
-            if 0 <= row < len(self._events):
-                self.beginRemoveRows(QModelIndex(), row, row)
-                del self._events[row]
-                self.endRemoveRows()
+        spans = [self._groups[r] for r in sorted(set(rows)) if 0 <= r < len(self._groups)]
+        if not spans:
+            return
+        self.beginResetModel()
+        for start, length in sorted(spans, reverse=True):
+            del self._events[start:start + length]
+        self._rebuild()
+        self.endResetModel()
 
     def move_row(self, row: int, delta: int) -> int:
         target = row + delta
-        if not (0 <= row < len(self._events)) or not (0 <= target < len(self._events)):
+        if not (0 <= row < len(self._groups)) or not (0 <= target < len(self._groups)):
             return row
+        a, b = (row, target) if row < target else (target, row)
+        (sa, la), (sb, lb) = self._groups[a], self._groups[b]  # adjacent, so sb == sa + la
         self.beginResetModel()
-        self._events[row], self._events[target] = self._events[target], self._events[row]
+        block_a = self._events[sa:sa + la]
+        block_b = self._events[sb:sb + lb]
+        self._events[sa:sb + lb] = block_b + block_a
+        self._rebuild()
         self.endResetModel()
         return target
 
-    def insert_events(self, at: int, events: List[Event]) -> None:
-        at = max(0, min(at, len(self._events)))
-        self.beginInsertRows(QModelIndex(), at, at + len(events) - 1)
+    def insert_events(self, at_row: int, events: List[Event]) -> None:
+        if 0 <= at_row < len(self._groups):
+            at = self._groups[at_row][0]
+        else:
+            at = len(self._events)
+        self.beginResetModel()
         self._events[at:at] = events
-        self.endInsertRows()
+        self._rebuild()
+        self.endResetModel()
 
 
 class MacroTableView(QWidget):
@@ -130,10 +170,19 @@ class MacroTableView(QWidget):
         btn_key.clicked.connect(self._add_key)
         btn_click.clicked.connect(self._add_click)
 
+        self._compact = QCheckBox("Compact view")
+        self._compact.setChecked(model.compact)
+        self._compact.setToolTip(
+            "Collapse held keys and mouse-move streams into single rows "
+            "(display only — playback is unchanged)."
+        )
+        self._compact.toggled.connect(model.set_compact)
+
         buttons = QHBoxLayout()
         for b in (btn_delete, btn_up, btn_down, btn_key, btn_click):
             buttons.addWidget(b)
         buttons.addStretch(1)
+        buttons.addWidget(self._compact)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._table)

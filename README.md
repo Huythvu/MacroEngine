@@ -22,6 +22,12 @@ red, press the potion key."*
   hit the panic key.
 - **Editable timeline** — a table of every event: delete, reorder (move up/down),
   insert key taps / clicks, and edit each event's delay inline.
+- **Compact view toggle** — a held key becomes hundreds of repeated events and mouse
+  motion becomes thousands of samples. Tick **Compact view** to collapse each run of
+  same-kind events into a single row (e.g. `⊞ Hold key 'a' ×512`), so a simple macro
+  reads as a short list. It's display-only — deleting/reordering a collapsed row acts
+  on the whole run, and playback is byte-for-byte identical. Untick it to see every
+  individual event.
 - **Save / load** macros and trigger sets as JSON.
 - **Vision triggers** — watch a screen region and fire an action:
   - **Template match** — snapshot a reference image (e.g. a buff icon); fire when it
