@@ -33,13 +33,16 @@ from ..core.hotkeys import (
     DEFAULT_RECORD,
     HotkeyManager,
 )
+from ..core.autorunner import AutoRunner
 from ..core.player import Player
 from ..core.recorder import Recorder
+from ..models.autoinput import AutoInput
 from ..models.buff import BuffGroup
 from ..models.macro import Macro
 from ..models.store import load_watchers, save_watchers
 from ..models.trigger import Trigger
 from ..vision.monitor import Monitor
+from .auto_input_dialog import AutoInputDialog
 from .buff_group_dialog import BuffGroupDialog
 from .macro_table import MacroTableModel, MacroTableView
 from .trigger_dialog import TriggerDialog
@@ -65,6 +68,8 @@ class MainWindow(QMainWindow):
         self._triggers: List[Trigger] = []
         self._groups: List[BuffGroup] = []
         self._rows: List[tuple] = []
+        self._auto_inputs: List[AutoInput] = []
+        self._auto_runner: Optional[AutoRunner] = None
 
         self._recorder: Optional[Recorder] = None
         self._player = Player(on_finished=lambda: self._bridge.playback_finished.emit())
@@ -160,6 +165,27 @@ class MainWindow(QMainWindow):
         self._btn_monitor.clicked.connect(self._toggle_monitor)
         layout.addWidget(self._btn_monitor)
 
+        # -- Auto inputs (timed repeaters) ----------------------------------
+        layout.addWidget(QLabel("<b>Auto inputs (timed)</b>"))
+        self._auto_list = QListWidget()
+        layout.addWidget(self._auto_list, 1)
+
+        auto_btns = QHBoxLayout()
+        a_add = QPushButton("Add")
+        a_edit = QPushButton("Edit")
+        a_remove = QPushButton("Remove")
+        a_add.clicked.connect(self._add_auto)
+        a_edit.clicked.connect(self._edit_auto)
+        a_remove.clicked.connect(self._remove_auto)
+        for b in (a_add, a_edit, a_remove):
+            auto_btns.addWidget(b)
+        layout.addLayout(auto_btns)
+
+        self._btn_auto = QPushButton("Start auto inputs")
+        self._btn_auto.setCheckable(True)
+        self._btn_auto.clicked.connect(self._toggle_autos)
+        layout.addWidget(self._btn_auto)
+
         return panel
 
     def _build_menu(self) -> None:
@@ -216,6 +242,11 @@ class MainWindow(QMainWindow):
             self._monitor.stop()
             self._btn_monitor.setChecked(False)
             self._btn_monitor.setText("Start monitoring")
+        if self._auto_runner and self._auto_runner.running:
+            self._auto_runner.stop()
+            self._auto_runner = None
+            self._btn_auto.setChecked(False)
+            self._btn_auto.setText("Start auto inputs")
         self._set_status("Stopped")
 
     # -- triggers & buff groups ---------------------------------------------
@@ -293,6 +324,54 @@ class MainWindow(QMainWindow):
     def _on_trigger_fired(self, name: str) -> None:
         self._set_status(f"Fired: {name}")
 
+    # -- auto inputs --------------------------------------------------------
+    def _refresh_autos(self) -> None:
+        self._auto_list.clear()
+        for a in self._auto_inputs:
+            self._auto_list.addItem(
+                QListWidgetItem(f"{'●' if a.enabled else '○'} {a.describe()}")
+            )
+
+    def _add_auto(self) -> None:
+        dlg = AutoInputDialog(parent=self)
+        if dlg.exec():
+            self._auto_inputs.append(dlg.get_auto())
+            self._refresh_autos()
+
+    def _edit_auto(self) -> None:
+        row = self._auto_list.currentRow()
+        if row < 0:
+            return
+        dlg = AutoInputDialog(auto=self._auto_inputs[row], parent=self)
+        if dlg.exec():
+            self._auto_inputs[row] = dlg.get_auto()
+            self._refresh_autos()
+
+    def _remove_auto(self) -> None:
+        row = self._auto_list.currentRow()
+        if row >= 0:
+            del self._auto_inputs[row]
+            self._refresh_autos()
+
+    def _toggle_autos(self) -> None:
+        if self._auto_runner and self._auto_runner.running:
+            self._auto_runner.stop()
+            self._auto_runner = None
+            self._btn_auto.setText("Start auto inputs")
+            self._set_status("Auto inputs stopped")
+            return
+        if not self._auto_inputs:
+            self._btn_auto.setChecked(False)
+            self._set_status("Add an auto input first")
+            return
+        self._auto_runner = AutoRunner(
+            self._auto_inputs,
+            on_fire=lambda name: self._bridge.trigger_fired.emit(name),
+        )
+        self._auto_runner.start()
+        self._btn_auto.setText("Stop auto inputs")
+        self._set_status("Auto inputs running…")
+
     # -- file ops -----------------------------------------------------------
     def _new_macro(self) -> None:
         self._macro = Macro()
@@ -335,11 +414,12 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            self._triggers, self._groups = load_watchers(path)
+            self._triggers, self._groups, self._auto_inputs = load_watchers(path)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Open failed", str(exc))
             return
         self._refresh_triggers()
+        self._refresh_autos()
         self._set_status(f"Opened {path}")
 
     def _save_triggers(self) -> None:
@@ -349,7 +429,7 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            save_watchers(self._triggers, self._groups, path)
+            save_watchers(self._triggers, self._groups, path, self._auto_inputs)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Save failed", str(exc))
             return
@@ -363,6 +443,8 @@ class MainWindow(QMainWindow):
         self._player.stop()
         if self._monitor and self._monitor.running:
             self._monitor.stop()
+        if self._auto_runner and self._auto_runner.running:
+            self._auto_runner.stop()
         if self._recorder and self._recorder.running:
             self._recorder.stop()
         self._hotkeys.stop()

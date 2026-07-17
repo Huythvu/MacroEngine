@@ -75,16 +75,17 @@ def test_store_roundtrip_and_backcompat(tmp_path):
     groups = [BuffGroup(name="buffs", items=[BuffItem(name="a", template_png=b"x")])]
     path = tmp_path / "w.json"
     save_watchers(triggers, groups, path)
-    t2, g2 = load_watchers(path)
+    t2, g2, a2 = load_watchers(path)
     assert len(t2) == 1 and t2[0].name == "hp"
     assert len(g2) == 1 and g2[0].items[0].name == "a"
+    assert a2 == []
 
-    # Old trigger-only file (no buff_groups key) still loads, with empty groups.
+    # Old trigger-only file (no buff_groups / auto_inputs keys) still loads.
     legacy = tmp_path / "legacy.json"
     legacy.write_text(json.dumps({
         "format": "macroengine.triggers", "version": 1,
         "triggers": [Trigger(name="old").to_dict()],
     }), encoding="utf-8")
-    t3, g3 = load_watchers(legacy)
+    t3, g3, a3 = load_watchers(legacy)
     assert len(t3) == 1 and t3[0].name == "old"
-    assert g3 == []
+    assert g3 == [] and a3 == []

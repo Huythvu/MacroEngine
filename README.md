@@ -42,8 +42,11 @@ red, press the potion key."*
   present/absent condition, its own key/macro, and a cooldown. Includes a **thumbnail
   preview** and a **Test** readout (detected? + match score) so you can verify before
   relying on it.
-- **No typing coordinates** — *Add Click* and region/trigger setup let you pick
-  positions by clicking directly on the screen.
+- **Auto inputs (timed repeaters)** — a simple auto-clicker / auto-presser: fire a
+  key, a click, or a whole macro on a repeating **interval** (with optional random
+  **jitter**). Independent of recording — several can run at once, each on its own timer.
+- **No typing coordinates** — *Add Click*, click positions, and region/trigger setup
+  let you pick positions by clicking directly on the screen.
 
 ## Global hotkeys
 
@@ -138,6 +141,18 @@ Best when your buff icons **shift/reorder** as buffs expire — each icon is mat
 
 Save/restore your triggers *and* buff groups together via **Watchers ▸ Save As… /
 Open…**.
+
+### Auto inputs (timed repeaters)
+An **auto-clicker / auto-presser**: fire a single action on a repeating timer,
+independent of recorded macros and vision. Several can run at once, each on its own
+interval.
+1. In the **Auto inputs** panel click **Add**.
+2. Pick the action: **Press key**, **Click at position** (pick the spot on screen —
+   no typing coordinates), or **Run macro**.
+3. Set the **Interval** (seconds; supports fractions like `0.1`) and optional
+   **Jitter ±** — a random amount added to each interval so the timing isn't perfectly
+   robotic.
+4. Click **Start auto inputs**. `Esc` stops them (and everything else) instantly.
 
 ## Windows notes / caveats
 
