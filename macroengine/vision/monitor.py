@@ -71,6 +71,9 @@ class Monitor:
                     continue
                 try:
                     self._evaluate(trig)
+                # TODO(audit): swallowing every exception hides real problems
+                # (bad region, capture failure). Route through the logging
+                # module (the app currently has no logging at all).
                 except Exception:  # a bad region/template must not kill the loop
                     continue
             for group in list(self._groups):
@@ -107,6 +110,9 @@ class Monitor:
                 label = f"{group.name}/{item.name}"
                 self._do_action(item.action, item.action_key, item.action_macro_path, label)
 
+    # TODO(audit): _last_fire is keyed by id(obj); CPython can reuse ids after
+    # GC and replacing an item on edit silently resets its cooldown. Use a
+    # stable per-object token (e.g. a uuid field) if this ever matters.
     def _cooldown_ok(self, key: int, cooldown_s: float) -> bool:
         now = time.perf_counter()
         if now - self._last_fire.get(key, 0.0) < cooldown_s:
@@ -124,6 +130,8 @@ class Monitor:
                 try:
                     self._player.play(Macro.load(macro_path))
                 except Exception:
+                    # TODO(audit): a missing/corrupt macro file fails silently
+                    # every tick — log it and surface once in the status bar.
                     pass
         if self._on_fire is not None:
             self._on_fire(label)

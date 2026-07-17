@@ -2,13 +2,14 @@
 
 Mouse-move events are throttled (and can be disabled entirely) so that
 keyboard-only macros stay clean instead of being flooded with thousands of
-motion samples.
+motion samples. The app's global hotkeys (F9/F10/Esc) are excluded from the
+recording so replaying a macro can never re-trigger record/play/panic.
 """
 
 from __future__ import annotations
 
 import time
-from typing import Callable, List, Optional
+from typing import Callable, Iterable, List, Optional
 
 from pynput import keyboard, mouse
 
@@ -20,7 +21,8 @@ from ..models.event import (
     MOUSE_SCROLL,
     Event,
 )
-from ..models.macro import Macro
+from ..models.macro import Macro, trim_edge_clicks
+from .hotkeys import DEFAULT_HOTKEY_EVENT_NAMES
 from .keys import button_to_name, key_to_name
 
 # Minimum seconds between recorded mouse-move samples.
@@ -32,9 +34,11 @@ class Recorder:
         self,
         record_mouse_move: bool = True,
         on_event: Optional[Callable[[Event], None]] = None,
+        ignored_keys: Iterable[str] = DEFAULT_HOTKEY_EVENT_NAMES,
     ) -> None:
         self.record_mouse_move = record_mouse_move
         self._on_event = on_event
+        self._ignored_keys = frozenset(ignored_keys)
         self.events: List[Event] = []
         self._kb: Optional[keyboard.Listener] = None
         self._mouse: Optional[mouse.Listener] = None
@@ -59,7 +63,16 @@ class Recorder:
         self._kb.start()
         self._mouse.start()
 
-    def stop(self) -> Macro:
+    def stop(
+        self, trim_leading_click: bool = False, trim_trailing_click: bool = False
+    ) -> Macro:
+        """Stop listening and return the recording.
+
+        Pass ``trim_leading_click`` when recording was *started* from the GUI
+        button and ``trim_trailing_click`` when it was *stopped* from it — the
+        corresponding edge click (on the app's own window) is stripped so
+        replays don't click on MacroEngine itself.
+        """
         self._running = False
         if self._kb is not None:
             self._kb.stop()
@@ -67,7 +80,12 @@ class Recorder:
         if self._mouse is not None:
             self._mouse.stop()
             self._mouse = None
-        return Macro(name="Recorded", events=list(self.events), loop_count=1)
+        events = list(self.events)
+        if trim_leading_click or trim_trailing_click:
+            events = trim_edge_clicks(
+                events, leading=trim_leading_click, trailing=trim_trailing_click
+            )
+        return Macro(name="Recorded", events=events, loop_count=1)
 
     @property
     def running(self) -> bool:
@@ -75,6 +93,9 @@ class Recorder:
 
     # -- internals ----------------------------------------------------------
     def _append(self, type_: str, data: dict) -> None:
+        # TODO(audit): _last_time/events are mutated from two listener threads
+        # (keyboard + mouse) without a lock, so concurrent events can skew each
+        # other's delay. Wrap timestamp+append in a threading.Lock.
         now = time.perf_counter()
         delay = now - self._last_time
         self._last_time = now
@@ -85,10 +106,16 @@ class Recorder:
 
     # keyboard
     def _on_press(self, key) -> None:
-        self._append(KEY_DOWN, {"key": key_to_name(key)})
+        name = key_to_name(key)
+        if name in self._ignored_keys:
+            return
+        self._append(KEY_DOWN, {"key": name})
 
     def _on_release(self, key) -> None:
-        self._append(KEY_UP, {"key": key_to_name(key)})
+        name = key_to_name(key)
+        if name in self._ignored_keys:
+            return
+        self._append(KEY_UP, {"key": name})
 
     # mouse
     def _on_move(self, x, y) -> None:

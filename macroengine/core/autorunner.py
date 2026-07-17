@@ -75,6 +75,10 @@ class AutoRunner:
                 if now >= when:
                     self._fire(ai)
                     due[id(ai)] = now + ai.next_interval()
+            # TODO(audit): this ticks every 5 ms even when the nearest due time
+            # is seconds away; sleeping min(due) - now (capped at TICK floor)
+            # would cut idle CPU. Also: `due` is keyed by id(obj) — same caveat
+            # as Monitor._cooldown_ok (id reuse / reset on edit).
             time.sleep(TICK)
 
     def _fire(self, ai: AutoInput) -> None:

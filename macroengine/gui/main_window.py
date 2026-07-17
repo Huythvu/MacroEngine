@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         self._rows: List[tuple] = []
         self._auto_inputs: List[AutoInput] = []
         self._auto_runner: Optional[AutoRunner] = None
+        self._record_started_from_button = False
 
         self._recorder: Optional[Recorder] = None
         self._player = Player(on_finished=lambda: self._bridge.playback_finished.emit())
@@ -100,7 +101,7 @@ class MainWindow(QMainWindow):
         self._btn_record = QPushButton(f"Record ({DEFAULT_RECORD})")
         self._btn_play = QPushButton(f"Play ({DEFAULT_PLAY})")
         self._btn_stop = QPushButton(f"Stop ({DEFAULT_PANIC})")
-        self._btn_record.clicked.connect(self._toggle_record)
+        self._btn_record.clicked.connect(lambda: self._toggle_record(from_button=True))
         self._btn_play.clicked.connect(self._toggle_play)
         self._btn_stop.clicked.connect(self._panic)
 
@@ -198,9 +199,14 @@ class MainWindow(QMainWindow):
         t.addAction("Save As…", self._save_triggers)
 
     # -- recorder / player --------------------------------------------------
-    def _toggle_record(self) -> None:
+    def _toggle_record(self, from_button: bool = False) -> None:
         if self._recorder and self._recorder.running:
-            macro = self._recorder.stop()
+            # Trim the edge clicks that landed on the app's own Record/Stop
+            # buttons so replays never click on MacroEngine itself.
+            macro = self._recorder.stop(
+                trim_leading_click=self._record_started_from_button,
+                trim_trailing_click=from_button,
+            )
             self._recorder = None
             macro.loop_count = self._loop.value()
             self._bridge.recorded.emit(macro)
@@ -209,6 +215,7 @@ class MainWindow(QMainWindow):
             return
         if self._player.running:
             return
+        self._record_started_from_button = from_button
         self._recorder = Recorder(record_mouse_move=self._record_moves.isChecked())
         self._recorder.start()
         self._btn_record.setText("Stop recording")
@@ -237,6 +244,10 @@ class MainWindow(QMainWindow):
         self._set_status("Playback finished")
 
     def _panic(self) -> None:
+        # TODO(audit): Esc is a *global* hotkey, so pressing Esc to cancel the
+        # RegionSelector/PointPicker overlays also lands here (harmless today —
+        # just a "Stopped" status). Consider pausing the panic hotkey while an
+        # overlay is open, or choosing a rarer default like Ctrl+Alt+Q.
         self._player.stop()
         if self._monitor and self._monitor.running:
             self._monitor.stop()

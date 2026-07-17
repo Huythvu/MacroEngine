@@ -240,6 +240,8 @@ class TriggerDialog(QDialog):
 
 
 # -- small layout helpers ---------------------------------------------------
+# TODO(audit): _wrap/_labeled are duplicated across trigger_dialog.py,
+# buff_group_dialog.py and auto_input_dialog.py — move to a shared gui/util.py.
 def _wrap(layout) -> QWidget:
     w = QWidget()
     layout.setContentsMargins(0, 0, 0, 0)

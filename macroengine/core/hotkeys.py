@@ -16,6 +16,12 @@ DEFAULT_RECORD = "<f9>"
 DEFAULT_PLAY = "<f10>"
 DEFAULT_PANIC = "<esc>"
 
+# The same keys as the Recorder sees them (keys.key_to_name form). The Recorder
+# must skip these: otherwise the F9 that stops a recording lands *inside* the
+# macro, and replaying it re-injects F9/F10/Esc — which GlobalHotKeys receives,
+# so playback would toggle recording or panic itself (audit bug #2).
+DEFAULT_HOTKEY_EVENT_NAMES = frozenset({"Key.f9", "Key.f10", "Key.esc"})
+
 
 class HotkeyManager:
     def __init__(

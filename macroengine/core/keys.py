@@ -17,6 +17,9 @@ from pynput import keyboard, mouse
 
 def key_to_name(key: Any) -> str:
     """Convert a pynput key (from a listener callback) to a portable string."""
+    # TODO(audit): on Windows, letters typed while Ctrl is held arrive as
+    # control characters (Ctrl+A -> '\x01'), so such recordings replay
+    # incorrectly. Prefer the vk-based name for KeyCode events on Windows.
     # KeyCode with a printable character.
     char = getattr(key, "char", None)
     if char is not None:
@@ -43,6 +46,9 @@ def name_to_key(name: str) -> Any:
     special = getattr(keyboard.Key, name, None)
     if special is not None:
         return special
+    # TODO(audit): an empty/unknown name silently becomes Key.space here —
+    # surprising when a trigger/auto-input key field is left blank. Raise a
+    # ValueError (and validate in the dialogs) instead.
     return keyboard.KeyCode.from_char(name[0]) if name else keyboard.Key.space
 
 

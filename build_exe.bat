@@ -13,6 +13,8 @@ if errorlevel 1 goto :error
 REM --- Optional custom icon -----------------------------------------------
 REM Drop your image at assets\icon_source.png (or .jpg) and it becomes the
 REM exe icon automatically. If none is present, the build proceeds iconless.
+REM TODO(audit): if several icon_source.* files exist, each is converted and
+REM the last one wins; consider stopping after the first match.
 set ICON_ARG=
 for %%F in (assets\icon_source.png assets\icon_source.jpg assets\icon_source.jpeg) do (
     if exist "%%F" (

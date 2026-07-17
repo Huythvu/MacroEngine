@@ -19,6 +19,18 @@ from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QDialog
 
+from ..screenmath import scale_point, scale_region
+
+
+def _pixel_ratio(widget: QDialog) -> float:
+    """Device pixel ratio of the screen the overlay is on (1.0 if unknown).
+
+    Qt coordinates are logical pixels; mss/pynput use physical pixels, so
+    everything this module returns must be scaled by this ratio (audit bug #1).
+    """
+    screen = widget.screen() or QGuiApplication.primaryScreen()
+    return float(screen.devicePixelRatio()) if screen else 1.0
+
 
 class RegionSelector(QDialog):
     def __init__(self, parent=None) -> None:
@@ -67,10 +79,13 @@ class RegionSelector(QDialog):
         if rect.width() < 3 or rect.height() < 3:
             self.reject()
             return
-        # Translate widget-local coords to global screen coords.
+        # Translate widget-local coords to global screen coords, then convert
+        # Qt logical pixels to physical pixels for mss/pynput.
         gx = rect.x() + self._offset.x()
         gy = rect.y() + self._offset.y()
-        self.region = (gx, gy, rect.width(), rect.height())
+        self.region = scale_region(
+            (gx, gy, rect.width(), rect.height()), _pixel_ratio(self)
+        )
         self.accept()
 
     def keyPressEvent(self, event) -> None:
@@ -109,7 +124,8 @@ class PointPicker(QDialog):
     def mouseReleaseEvent(self, event) -> None:
         self.button = "right" if event.button() == Qt.RightButton else "left"
         gp = event.globalPosition().toPoint()
-        self.point = (gp.x(), gp.y())
+        # Qt logical pixels -> physical pixels (pynput clicks in physical).
+        self.point = scale_point(gp.x(), gp.y(), _pixel_ratio(self))
         self.accept()
 
     def keyPressEvent(self, event) -> None:

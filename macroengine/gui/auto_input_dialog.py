@@ -142,6 +142,7 @@ class AutoInputDialog(QDialog):
         return a
 
 
+# TODO(audit): duplicated helper — see note in trigger_dialog.py (gui/util.py).
 def _wrap(layout) -> QWidget:
     w = QWidget()
     layout.setContentsMargins(0, 0, 0, 0)
