@@ -32,6 +32,13 @@ def routines_dir() -> Path:
     return path
 
 
+def macros_dir() -> Path:
+    """Folder holding the saved-macro library (``*.json``)."""
+    path = app_data_dir() / "macros"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def safe_filename(name: str) -> str:
     """Turn a routine name into a safe file stem."""
     keep = "".join(c if (c.isalnum() or c in " -_.") else "_" for c in name).strip()

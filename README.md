@@ -122,7 +122,11 @@ manually: `python tools/make_icon.py assets/icon_source.png`. See `assets/README
    **Add Click (pick on screen)…** which lets you *click where you want the macro to
    click* instead of typing coordinates. Select rows and **Copy** (`Ctrl+C`) to copy
    them — as readable text for any editor, and pasteable back in with **Paste**
-   (`Ctrl+V`) to duplicate steps. Use **Macro ▸ Save As…** to keep it.
+   (`Ctrl+V`) to duplicate steps.
+5. **Save to library** — saved macros appear in the **Saved macros** list on the left
+   (stored in your per-user macros folder) and can be opened with a double-click.
+   They also show up in the routine **+ Macro…** step picker, so recorded sections
+   plug straight into routines. **Macro ▸ Save As…** still works for arbitrary paths.
 
 ### Vision triggers (single watcher)
 1. In the panel click **Add Trigger**.

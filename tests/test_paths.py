@@ -13,6 +13,11 @@ def test_app_data_and_routines_dir_created(tmp_path, monkeypatch):
     assert rdir.parent == paths.app_data_dir()
     assert rdir.name == "routines"
 
+    mdir = paths.macros_dir()
+    assert mdir.exists() and mdir.is_dir()
+    assert mdir.parent == paths.app_data_dir()
+    assert mdir.name == "macros"
+
 
 def test_safe_filename():
     assert paths.safe_filename("Daily quest") == "Daily quest"

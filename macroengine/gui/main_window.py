@@ -8,6 +8,7 @@ QObject signals, which Qt delivers as queued connections.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QObject, Qt, Signal
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -22,6 +24,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QSplitter,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -41,6 +44,7 @@ from ..models.buff import BuffGroup
 from ..models.macro import Macro
 from ..models.store import load_watchers, save_watchers
 from ..models.trigger import Trigger
+from ..paths import macros_dir, safe_filename
 from ..vision.monitor import Monitor
 from .auto_input_dialog import AutoInputDialog
 from .buff_group_dialog import BuffGroupDialog
@@ -134,14 +138,26 @@ class MainWindow(QMainWindow):
         # Macro timeline.
         self._table = MacroTableView(self._model)
 
+        recorder_body = QWidget()
+        rb_layout = QVBoxLayout(recorder_body)
+        rb_layout.setContentsMargins(0, 0, 0, 0)
+        rb_layout.addLayout(controls)
+        rb_layout.addWidget(self._table)
+
+        recorder_split = QSplitter(Qt.Horizontal)
+        recorder_split.addWidget(self._build_macro_library())
+        recorder_split.addWidget(recorder_body)
+        recorder_split.setStretchFactor(0, 1)
+        recorder_split.setStretchFactor(1, 3)
+
         recorder_tab = QWidget()
         recorder_layout = QVBoxLayout(recorder_tab)
         recorder_layout.addWidget(_intro(
             "Record keyboard &amp; mouse into a macro, then replay it (looped if you "
-            "like). Edit the steps in the table below; save with Macro ▸ Save As."
+            "like). Edit the steps in the table; <b>Save to library</b> to reuse it in "
+            "routines. Saved macros are on the left."
         ))
-        recorder_layout.addLayout(controls)
-        recorder_layout.addWidget(self._table)
+        recorder_layout.addWidget(recorder_split)
 
         # Routine composer tab (chains saved macros with waits + vision checks).
         self._routine_panel = RoutinePanel(status_cb=self._set_status)
@@ -165,6 +181,94 @@ class MainWindow(QMainWindow):
             "key when something appears/disappears; auto inputs repeat a key on a timer.",
         )
         self.setCentralWidget(tabs)
+
+    def _build_macro_library(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.addWidget(QLabel("<b>Saved macros</b>"))
+        self._macro_library = QListWidget()
+        self._macro_library.itemDoubleClicked.connect(lambda _i: self._macro_lib_open())
+        layout.addWidget(self._macro_library, 1)
+
+        row1 = QHBoxLayout()
+        btn_open = QPushButton("Open")
+        btn_save = QPushButton("Save to library")
+        btn_open.clicked.connect(self._macro_lib_open)
+        btn_save.clicked.connect(self._macro_lib_save)
+        row1.addWidget(btn_open)
+        row1.addWidget(btn_save)
+        layout.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        btn_delete = QPushButton("Delete")
+        btn_refresh = QPushButton("Refresh")
+        btn_delete.clicked.connect(self._macro_lib_delete)
+        btn_refresh.clicked.connect(self._refresh_macro_library)
+        row2.addWidget(btn_delete)
+        row2.addWidget(btn_refresh)
+        layout.addLayout(row2)
+
+        self._refresh_macro_library()
+        return panel
+
+    def _refresh_macro_library(self) -> None:
+        self._macro_library.clear()
+        for path in sorted(macros_dir().glob("*.json")):
+            try:
+                name = Macro.load(path).name
+            except Exception:  # noqa: BLE001
+                name = path.stem
+            item = QListWidgetItem(name or path.stem)
+            item.setData(Qt.UserRole, str(path))
+            self._macro_library.addItem(item)
+
+    def _macro_lib_open(self) -> None:
+        item = self._macro_library.currentItem()
+        if item is None:
+            return
+        try:
+            self._macro = Macro.load(item.data(Qt.UserRole))
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Open failed", str(exc))
+            return
+        self._model.set_events(self._macro.events)
+        self._loop.setValue(self._macro.loop_count)
+        self._set_status(f"Opened macro '{self._macro.name}'")
+
+    def _macro_lib_save(self) -> None:
+        if not self._macro.events:
+            self._set_status("Nothing to save — record or open a macro first")
+            return
+        default = self._macro.name if self._macro.name not in ("", "Recorded") else ""
+        name, ok = QInputDialog.getText(self, "Save macro", "Name:", text=default)
+        if not ok or not name.strip():
+            return
+        self._macro.name = name.strip()
+        self._macro.loop_count = self._loop.value()
+        try:
+            self._macro.save(macros_dir() / f"{safe_filename(self._macro.name)}.json")
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Save failed", str(exc))
+            return
+        self._refresh_macro_library()
+        self._set_status(f"Saved macro '{self._macro.name}' to library")
+
+    def _macro_lib_delete(self) -> None:
+        item = self._macro_library.currentItem()
+        if item is None:
+            return
+        path = Path(item.data(Qt.UserRole))
+        if QMessageBox.question(
+            self, "Delete macro", f"Delete '{path.stem}' from the library?"
+        ) != QMessageBox.Yes:
+            return
+        try:
+            path.unlink()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Delete failed", str(exc))
+            return
+        self._refresh_macro_library()
+        self._set_status(f"Deleted macro '{path.stem}'")
 
     def _build_triggers_panel(self) -> QWidget:
         panel = QWidget()
@@ -448,7 +552,7 @@ class MainWindow(QMainWindow):
 
     def _open_macro(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open macro", "", "Macro files (*.json);;All files (*)"
+            self, "Open macro", str(macros_dir()), "Macro files (*.json);;All files (*)"
         )
         if not path:
             return
@@ -463,7 +567,7 @@ class MainWindow(QMainWindow):
 
     def _save_macro(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save macro", "macro.json", "Macro files (*.json)"
+            self, "Save macro", str(macros_dir() / "macro.json"), "Macro files (*.json)"
         )
         if not path:
             return
@@ -473,6 +577,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Save failed", str(exc))
             return
+        self._refresh_macro_library()
         self._set_status(f"Saved {path}")
 
     def _open_triggers(self) -> None:

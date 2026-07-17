@@ -28,7 +28,9 @@ from ..models.routine import (
     TIMEOUT_STOP,
     RoutineStep,
 )
+from ..models.macro import Macro
 from ..models.trigger import DETECT_TEMPLATE
+from ..paths import macros_dir
 from .condition_widget import ConditionWidget, _wrap
 
 
@@ -40,6 +42,18 @@ class MacroStepDialog(QDialog):
 
         self._name = QLineEdit(self._step.name)
         self._name.setPlaceholderText("optional label, e.g. 'walk to vendor'")
+
+        # Pick from the saved-macro library, or browse to any file.
+        self._library = QComboBox()
+        self._library.addItem("— pick from library —", "")
+        for p in sorted(macros_dir().glob("*.json")):
+            try:
+                name = Macro.load(p).name or p.stem
+            except Exception:  # noqa: BLE001
+                name = p.stem
+            self._library.addItem(name, str(p))
+        self._library.currentIndexChanged.connect(self._pick_from_library)
+
         self._path = QLineEdit(self._step.macro_path)
         btn_browse = QPushButton("Browse…")
         btn_browse.clicked.connect(self._browse)
@@ -55,6 +69,7 @@ class MacroStepDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("Name:", self._name)
+        form.addRow("From library:", self._library)
         form.addRow("Macro file:", _wrap(path_row))
         form.addRow("Loops:", self._loops)
 
@@ -65,9 +80,14 @@ class MacroStepDialog(QDialog):
         root.addLayout(form)
         root.addWidget(buttons)
 
+    def _pick_from_library(self, index: int) -> None:
+        path = self._library.currentData()
+        if path:
+            self._path.setText(path)
+
     def _browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select macro", "", "Macro files (*.json);;All files (*)"
+            self, "Select macro", str(macros_dir()), "Macro files (*.json);;All files (*)"
         )
         if path:
             self._path.setText(path)
