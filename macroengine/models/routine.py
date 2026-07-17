@@ -62,6 +62,9 @@ class RoutineStep:
     ratio_threshold: float = 0.2
     timeout_s: float = 30.0  # 0 = wait forever
     on_timeout: str = TIMEOUT_STOP
+    # After the condition is met (template mode), click the center of where the
+    # reference image was found — e.g. wait for an "Accept" button, then click it.
+    click_on_match: bool = False
 
     def to_trigger(self) -> Trigger:
         """Bridge to :class:`Trigger` so the runner and the dialog's Test button
@@ -90,7 +93,8 @@ class RoutineStep:
             timeout = "forever" if self.timeout_s <= 0 else f"{self.timeout_s:g}s"
             after = "stop" if self.on_timeout == TIMEOUT_STOP else "continue"
             what = self.name or f"{self.detection} {self.condition}"
-            return f"Wait until {what} (timeout {timeout} → {after})"
+            click = ", then click it" if self.click_on_match else ""
+            return f"Wait until {what} (timeout {timeout} → {after}){click}"
         return self.type
 
     def label(self) -> str:
@@ -118,6 +122,7 @@ class RoutineStep:
             "ratio_threshold": self.ratio_threshold,
             "timeout_s": self.timeout_s,
             "on_timeout": self.on_timeout,
+            "click_on_match": self.click_on_match,
         }
 
     @classmethod
@@ -141,6 +146,7 @@ class RoutineStep:
             ratio_threshold=float(raw.get("ratio_threshold", 0.2)),
             timeout_s=float(raw.get("timeout_s", 30.0)),
             on_timeout=raw.get("on_timeout", TIMEOUT_STOP),
+            click_on_match=bool(raw.get("click_on_match", False)),
         )
 
 

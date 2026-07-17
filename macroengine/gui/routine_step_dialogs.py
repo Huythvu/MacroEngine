@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -149,10 +150,19 @@ class VisionStepDialog(QDialog):
             0 if self._step.on_timeout == TIMEOUT_STOP else 1
         )
 
+        self._click_match = QCheckBox("Click where the image was found")
+        self._click_match.setChecked(self._step.click_on_match)
+        self._click_match.setToolTip(
+            "After the condition is met, left-click the center of the found "
+            "reference — e.g. wait for an 'Accept' button, then click it. "
+            "Template detection only."
+        )
+
         form = QFormLayout()
         form.addRow("Name:", self._name)
         form.addRow("Timeout (s):", self._timeout)
         form.addRow("On timeout:", self._on_timeout)
+        form.addRow("", self._click_match)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._accept)
@@ -172,6 +182,16 @@ class VisionStepDialog(QDialog):
                 "Capture a reference snapshot from the region first.",
             )
             return
+        if (
+            self._click_match.isChecked()
+            and self._condition_widget.detection_kind != DETECT_TEMPLATE
+        ):
+            QMessageBox.warning(
+                self, "Needs template detection",
+                "'Click where the image was found' needs Template detection — "
+                "color mode has no image to locate.",
+            )
+            return
         self.accept()
 
     def get_step(self) -> RoutineStep:
@@ -181,4 +201,5 @@ class VisionStepDialog(QDialog):
         self._condition_widget.apply_to(s)
         s.timeout_s = float(self._timeout.value())
         s.on_timeout = self._on_timeout.currentData()
+        s.click_on_match = self._click_match.isChecked()
         return s

@@ -14,13 +14,18 @@ import threading
 import time
 from typing import Callable, List, Optional
 
-from pynput import keyboard
+from pynput import keyboard, mouse
 
 from ..core import keyspec
 from ..core.player import Player
 from ..models.buff import BuffGroup
 from ..models.macro import Macro
-from ..models.trigger import ACTION_PRESS_KEY, ACTION_RUN_MACRO, Trigger
+from ..models.trigger import (
+    ACTION_CLICK_MATCH,
+    ACTION_PRESS_KEY,
+    ACTION_RUN_MACRO,
+    Trigger,
+)
 from . import capture, detector
 
 DEFAULT_POLL_INTERVAL = 0.15
@@ -39,6 +44,7 @@ class Monitor:
         self._poll_interval = poll_interval
         self._on_fire = on_fire
         self._kbd = keyboard.Controller()
+        self._mouse = mouse.Controller()
         self._player = Player()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -94,8 +100,23 @@ class Monitor:
         image = capture.grab_region(trig.region)
         if not detector.condition_met(trig, image):
             return
+        # For click-on-match, locate the reference in the already-captured frame
+        # so we click exactly what the condition just saw.
+        click_pos = None
+        if trig.action == ACTION_CLICK_MATCH:
+            if not trig.template_png:
+                return
+            score, box = detector.template_locate(
+                image, detector.decode_png(trig.template_png)
+            )
+            if score < trig.match_threshold:
+                return  # condition fired but there is nothing on screen to click
+            click_pos = detector.match_screen_center(trig.region, box)
         if self._cooldown_ok(id(trig), trig.cooldown_s):
-            self._do_action(trig.action, trig.action_key, trig.action_macro_path, trig.name)
+            self._do_action(
+                trig.action, trig.action_key, trig.action_macro_path, trig.name,
+                click_pos=click_pos,
+            )
 
     def _evaluate_group(self, group: BuffGroup) -> None:
         # Capture the shared bar region once, then test every buff icon against it.
@@ -120,9 +141,17 @@ class Monitor:
         self._last_fire[key] = now
         return True
 
-    def _do_action(self, action: str, key: str, macro_path: str, label: str) -> None:
+    def _do_action(
+        self, action: str, key: str, macro_path: str, label: str, click_pos=None
+    ) -> None:
         if action == ACTION_PRESS_KEY:
             keyspec.press_keystroke(self._kbd, key)
+        elif action == ACTION_CLICK_MATCH:
+            if click_pos is None:
+                return
+            self._mouse.position = click_pos
+            self._mouse.press(mouse.Button.left)
+            self._mouse.release(mouse.Button.left)
         elif action == ACTION_RUN_MACRO:
             if macro_path and not self._player.running:
                 try:

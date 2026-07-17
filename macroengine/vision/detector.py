@@ -52,6 +52,36 @@ def template_match(image_bgr: np.ndarray, template_bgr: np.ndarray) -> float:
     return float(max_val)
 
 
+def template_locate(
+    image_bgr: np.ndarray, template_bgr: np.ndarray
+) -> Tuple[float, Tuple[int, int, int, int]]:
+    """Best match of ``template`` in ``image``: ``(score, (x, y, w, h))``.
+
+    The box is the template's position within the searched image (top-left plus
+    the template's size). If the template cannot fit, score is ``0.0``.
+    """
+    ih, iw = image_bgr.shape[:2]
+    th, tw = template_bgr.shape[:2]
+    if th > ih or tw > iw:
+        return (0.0, (0, 0, tw, th))
+    result = cv2.matchTemplate(image_bgr, template_bgr, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, max_loc = cv2.minMaxLoc(result)
+    return (float(max_val), (int(max_loc[0]), int(max_loc[1]), tw, th))
+
+
+def match_screen_center(
+    region: Tuple[int, int, int, int], box: Tuple[int, int, int, int]
+) -> Tuple[int, int]:
+    """Screen coordinates of a match box's center.
+
+    ``box`` is relative to the captured region (as returned by
+    :func:`template_locate`); ``region`` is the region's screen placement.
+    """
+    rx, ry = region[0], region[1]
+    x, y, w, h = box
+    return (rx + x + w // 2, ry + y + h // 2)
+
+
 def color_ratio(
     image_bgr: np.ndarray,
     hsv_lower: Tuple[int, int, int],

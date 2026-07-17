@@ -25,8 +25,9 @@ COND_RATIO_ABOVE = "ratio_above"  # color: matched fraction > threshold (e.g. HP
 COND_RATIO_BELOW = "ratio_below"  # color: matched fraction < threshold
 
 # -- actions ----------------------------------------------------------------
-ACTION_PRESS_KEY = "press_key"    # tap a single key
-ACTION_RUN_MACRO = "run_macro"    # play a saved macro once
+ACTION_PRESS_KEY = "press_key"      # tap a single key
+ACTION_RUN_MACRO = "run_macro"      # play a saved macro once
+ACTION_CLICK_MATCH = "click_match"  # click where the template was found (template mode)
 
 FILE_FORMAT = "macroengine.triggers"
 FILE_VERSION = 1
@@ -106,6 +107,8 @@ class Trigger:
             det = f"color {self.condition} {self.ratio_threshold:.2f}"
         if self.action == ACTION_PRESS_KEY:
             act = f"press '{self.action_key}'"
+        elif self.action == ACTION_CLICK_MATCH:
+            act = "click the found image"
         else:
             act = f"run {Path(self.action_macro_path).name or '<macro>'}"
         return f"{det} -> {act}"

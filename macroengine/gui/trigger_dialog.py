@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..models.trigger import (
+    ACTION_CLICK_MATCH,
     ACTION_PRESS_KEY,
     ACTION_RUN_MACRO,
     DETECT_TEMPLATE,
@@ -48,9 +49,9 @@ class TriggerDialog(QDialog):
         self._action = QComboBox()
         self._action.addItem("Press key", ACTION_PRESS_KEY)
         self._action.addItem("Run macro", ACTION_RUN_MACRO)
-        self._action.setCurrentIndex(
-            0 if self._trigger.action == ACTION_PRESS_KEY else 1
-        )
+        self._action.addItem("Click on the found image", ACTION_CLICK_MATCH)
+        idx = self._action.findData(self._trigger.action)
+        self._action.setCurrentIndex(max(0, idx))
         self._action.currentIndexChanged.connect(self._sync_action)
         self._action_key = KeyCaptureEdit(self._trigger.action_key)
         self._action_macro = QLineEdit(self._trigger.action_macro_path)
@@ -87,11 +88,13 @@ class TriggerDialog(QDialog):
         self._sync_action()
 
     def _sync_action(self) -> None:
-        is_key = self._action.currentData() == ACTION_PRESS_KEY
+        action = self._action.currentData()
+        is_key = action == ACTION_PRESS_KEY
+        is_macro = action == ACTION_RUN_MACRO
         self._key_label.setVisible(is_key)
         self._action_key.setVisible(is_key)
-        self._macro_label.setVisible(not is_key)
-        self._macro_widget.setVisible(not is_key)
+        self._macro_label.setVisible(is_macro)
+        self._macro_widget.setVisible(is_macro)
 
     def _browse_macro(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -108,6 +111,16 @@ class TriggerDialog(QDialog):
             QMessageBox.warning(
                 self, "Missing snapshot",
                 "Capture a reference snapshot from the region first.",
+            )
+            return
+        if (
+            self._action.currentData() == ACTION_CLICK_MATCH
+            and self._condition_widget.detection_kind != DETECT_TEMPLATE
+        ):
+            QMessageBox.warning(
+                self, "Needs template detection",
+                "'Click on the found image' needs Template detection — color mode "
+                "has no image to locate.",
             )
             return
         self.accept()

@@ -135,9 +135,11 @@ manually: `python tools/make_icon.py assets/icon_source.png`. See `assets/README
    it shows the live image and reports whether the condition fires (present/absent +
    match score for template, or the color match ratio) so you can confirm before
    relying on it.
-4. Choose the action (press a key/combo, or run a macro) and a cooldown. The key
-   field has a **Capture** button — press the actual key/combo (incl. Esc, Alt,
-   Ctrl+C…) instead of typing its name.
+4. Choose the action — press a key/combo, run a macro, or **Click on the found
+   image** (template mode: left-clicks wherever the reference currently is inside
+   the region, even if it moves) — and a cooldown. The key field has a **Capture**
+   button — press the actual key/combo (incl. Esc, Alt, Ctrl+C…) instead of typing
+   its name.
 5. Click **Start monitoring**. `Esc` stops it.
 
 ### Buff groups (watch several buffs on one bar)
@@ -171,6 +173,9 @@ chain them on the **Routine** tab:
      present/absent or color ratio — same editor as vision triggers, including
      capture, thumbnail, and **Test now**). Each has a **timeout** that either
      **stops the routine** (it names the failing step) or **continues anyway**.
+     Tick **Click where the image was found** to left-click the reference once it
+     appears — e.g. *wait for the "Accept" button, then click it* — even if the
+     button isn't always in the same place.
 3. Reorder with Move Up/Down, untick a step to skip it, set routine **Loops**
    (0 = forever), then **Run routine**. The current step highlights while running;
    `Esc` stops everything instantly.

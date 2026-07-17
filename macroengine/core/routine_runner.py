@@ -12,6 +12,8 @@ import threading
 import time
 from typing import Callable, Optional
 
+from pynput import mouse
+
 from ..models.macro import Macro
 from ..models.routine import (
     STEP_MACRO,
@@ -37,6 +39,7 @@ class RoutineRunner:
         self._on_step = on_step
         self._on_finished = on_finished
         self._player = Player()
+        self._mouse = mouse.Controller()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
@@ -126,15 +129,30 @@ class RoutineRunner:
             try:
                 image = capture.grab_region(step.region)
                 if detector.condition_met(trigger, image):
+                    self._maybe_click_match(step, image)
                     return (True, "")
             except Exception as exc:  # noqa: BLE001
                 return (False, f"capture failed: {exc}")
             if deadline is not None and time.perf_counter() >= deadline:
                 if step.on_timeout == TIMEOUT_STOP:
                     return (False, f"timed out after {step.timeout_s:g}s")
-                return (True, "")  # continue anyway
+                return (True, "")  # continue anyway (no click — nothing was found)
             self._sleep(VISION_POLL_INTERVAL)
         return (False, "stopped")
+
+    def _maybe_click_match(self, step: RoutineStep, image) -> None:
+        """After the condition is met, optionally click the found reference —
+        located in the same frame the condition just evaluated."""
+        if not step.click_on_match or not step.template_png:
+            return
+        score, box = detector.template_locate(
+            image, detector.decode_png(step.template_png)
+        )
+        if score < step.match_threshold:
+            return  # e.g. an 'absent' condition — nothing on screen to click
+        self._mouse.position = detector.match_screen_center(step.region, box)
+        self._mouse.press(mouse.Button.left)
+        self._mouse.release(mouse.Button.left)
 
     def _sleep(self, seconds: float) -> None:
         end = time.perf_counter() + seconds
