@@ -7,13 +7,26 @@ REM ============================================================
 
 echo Installing dependencies...
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt pyinstaller
+python -m pip install -r requirements.txt pyinstaller Pillow
 if errorlevel 1 goto :error
+
+REM --- Optional custom icon -----------------------------------------------
+REM Drop your image at assets\icon_source.png (or .jpg) and it becomes the
+REM exe icon automatically. If none is present, the build proceeds iconless.
+set ICON_ARG=
+for %%F in (assets\icon_source.png assets\icon_source.jpg assets\icon_source.jpeg) do (
+    if exist "%%F" (
+        echo Generating icon from %%F ...
+        python tools\make_icon.py "%%F" -o assets\MacroEngine.ico
+    )
+)
+if exist assets\MacroEngine.ico set ICON_ARG=--icon assets\MacroEngine.ico
 
 echo.
 echo Building MacroEngine.exe ...
 python -m PyInstaller --noconfirm --clean --onefile --windowed ^
     --name MacroEngine ^
+    %ICON_ARG% ^
     --collect-submodules pynput ^
     --collect-submodules mss ^
     run.py

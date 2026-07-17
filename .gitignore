@@ -9,3 +9,5 @@ dist/
 *.spec
 # Local user data
 *.macro.json
+# Generated icon (derived from your assets/icon_source.*)
+assets/MacroEngine.ico

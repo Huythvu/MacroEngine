@@ -80,6 +80,12 @@ Double-click that to launch the app — no Python or editor required. Right-clic
 > can't be produced from macOS/Linux. Build it once per machine (or share the produced
 > `dist\MacroEngine.exe`).
 
+### Custom exe icon (optional)
+
+Drop any image at **`assets/icon_source.png`** and `build_exe.bat` will automatically
+convert it to a proper multi-size `.ico` and use it as the exe's icon. To convert
+manually: `python tools/make_icon.py assets/icon_source.png`. See `assets/README.md`.
+
 ### Recorder
 1. Set **Loops** (0 = forever) and optionally untick *Record mouse moves*.
 2. Click **Record** (or press `F9`), perform your inputs, then `F9` again to stop.
