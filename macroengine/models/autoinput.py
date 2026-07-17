@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from typing import Any, Dict
 
 # Action kinds.
-AUTO_PRESS_KEY = "press_key"   # tap a key
+AUTO_PRESS_KEY = "press_key"   # tap a key or combo (e.g. "a", "esc", "ctrl+c")
+AUTO_TYPE_TEXT = "type_text"   # type a whole string (e.g. "123asd")
 AUTO_CLICK = "click"           # click at a fixed screen position
 AUTO_RUN_MACRO = "run_macro"   # play a saved macro once
 
@@ -24,8 +25,10 @@ class AutoInput:
     enabled: bool = True
 
     action: str = AUTO_PRESS_KEY
-    # press_key
+    # press_key — a keystroke spec (see core.keyspec): "a", "esc", "ctrl+c"...
     key: str = "1"
+    # type_text — a literal string to type out
+    text: str = ""
     # click
     x: int = 0
     y: int = 0
@@ -42,6 +45,7 @@ class AutoInput:
             "enabled": self.enabled,
             "action": self.action,
             "key": self.key,
+            "text": self.text,
             "x": self.x,
             "y": self.y,
             "button": self.button,
@@ -57,6 +61,7 @@ class AutoInput:
             enabled=bool(raw.get("enabled", True)),
             action=raw.get("action", AUTO_PRESS_KEY),
             key=raw.get("key", "1"),
+            text=raw.get("text", ""),
             x=int(raw.get("x", 0)),
             y=int(raw.get("y", 0)),
             button=raw.get("button", "left"),
@@ -75,6 +80,9 @@ class AutoInput:
     def describe(self) -> str:
         if self.action == AUTO_PRESS_KEY:
             what = f"press '{self.key}'"
+        elif self.action == AUTO_TYPE_TEXT:
+            preview = self.text if len(self.text) <= 20 else self.text[:17] + "…"
+            what = f"type '{preview}'"
         elif self.action == AUTO_CLICK:
             what = f"{self.button}-click ({self.x}, {self.y})"
         else:

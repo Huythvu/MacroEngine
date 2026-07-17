@@ -17,10 +17,12 @@ from ..models.autoinput import (
     AUTO_CLICK,
     AUTO_PRESS_KEY,
     AUTO_RUN_MACRO,
+    AUTO_TYPE_TEXT,
     AutoInput,
 )
 from ..models.macro import Macro
-from .keys import name_to_button, name_to_key
+from . import keyspec
+from .keys import name_to_button
 from .player import Player
 
 # Scheduler granularity. Intervals shorter than this can't be timed precisely.
@@ -83,9 +85,9 @@ class AutoRunner:
 
     def _fire(self, ai: AutoInput) -> None:
         if ai.action == AUTO_PRESS_KEY:
-            k = name_to_key(ai.key)
-            self._kbd.press(k)
-            self._kbd.release(k)
+            keyspec.press_keystroke(self._kbd, ai.key)
+        elif ai.action == AUTO_TYPE_TEXT:
+            keyspec.type_text(self._kbd, ai.text)
         elif ai.action == AUTO_CLICK:
             self._mouse.position = (ai.x, ai.y)
             button = name_to_button(ai.button)

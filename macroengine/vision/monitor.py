@@ -16,7 +16,7 @@ from typing import Callable, List, Optional
 
 from pynput import keyboard
 
-from ..core.keys import name_to_key
+from ..core import keyspec
 from ..core.player import Player
 from ..models.buff import BuffGroup
 from ..models.macro import Macro
@@ -122,9 +122,7 @@ class Monitor:
 
     def _do_action(self, action: str, key: str, macro_path: str, label: str) -> None:
         if action == ACTION_PRESS_KEY:
-            k = name_to_key(key)
-            self._kbd.press(k)
-            self._kbd.release(k)
+            keyspec.press_keystroke(self._kbd, key)
         elif action == ACTION_RUN_MACRO:
             if macro_path and not self._player.running:
                 try:

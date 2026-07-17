@@ -23,8 +23,10 @@ from ..models.autoinput import (
     AUTO_CLICK,
     AUTO_PRESS_KEY,
     AUTO_RUN_MACRO,
+    AUTO_TYPE_TEXT,
     AutoInput,
 )
+from .key_capture import KeyCaptureEdit
 from .region_selector import PointPicker
 
 
@@ -38,16 +40,23 @@ class AutoInputDialog(QDialog):
         self._name = QLineEdit(self._auto.name)
 
         self._action = QComboBox()
-        self._action.addItem("Press key", AUTO_PRESS_KEY)
+        self._action.addItem("Press key / combo", AUTO_PRESS_KEY)
+        self._action.addItem("Type text", AUTO_TYPE_TEXT)
         self._action.addItem("Click at position", AUTO_CLICK)
         self._action.addItem("Run macro", AUTO_RUN_MACRO)
         self._action.setCurrentIndex(
-            {AUTO_PRESS_KEY: 0, AUTO_CLICK: 1, AUTO_RUN_MACRO: 2}.get(self._auto.action, 0)
+            {AUTO_PRESS_KEY: 0, AUTO_TYPE_TEXT: 1, AUTO_CLICK: 2, AUTO_RUN_MACRO: 3}.get(
+                self._auto.action, 0
+            )
         )
         self._action.currentIndexChanged.connect(self._sync)
 
-        # press key
-        self._key = QLineEdit(self._auto.key)
+        # press key / combo
+        self._key = KeyCaptureEdit(self._auto.key)
+
+        # type text
+        self._text = QLineEdit(self._auto.text)
+        self._text.setPlaceholderText("text to type, e.g. 123asd")
 
         # click
         self._pos_label = QLabel(self._pos_text())
@@ -85,6 +94,8 @@ class AutoInputDialog(QDialog):
         form.addRow("Action:", self._action)
         self._key_label = QLabel("Key:")
         form.addRow(self._key_label, self._key)
+        self._text_label = QLabel("Text:")
+        form.addRow(self._text_label, self._text)
         self._pos_form_label = QLabel("Position:")
         form.addRow(self._pos_form_label, self._pos_widget)
         self._macro_form_label = QLabel("Macro:")
@@ -121,10 +132,13 @@ class AutoInputDialog(QDialog):
     def _sync(self) -> None:
         action = self._action.currentData()
         is_key = action == AUTO_PRESS_KEY
+        is_text = action == AUTO_TYPE_TEXT
         is_click = action == AUTO_CLICK
         is_macro = action == AUTO_RUN_MACRO
         self._key_label.setVisible(is_key)
         self._key.setVisible(is_key)
+        self._text_label.setVisible(is_text)
+        self._text.setVisible(is_text)
         self._pos_form_label.setVisible(is_click)
         self._pos_widget.setVisible(is_click)
         self._macro_form_label.setVisible(is_macro)
@@ -134,7 +148,8 @@ class AutoInputDialog(QDialog):
         a = self._auto
         a.name = self._name.text() or "Auto input"
         a.action = self._action.currentData()
-        a.key = self._key.text() or "1"
+        a.key = self._key.keystroke() or "1"
+        a.text = self._text.text()
         a.x, a.y, a.button = self._x, self._y, self._button
         a.macro_path = self._macro.text()
         a.interval_s = float(self._interval.value())

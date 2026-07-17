@@ -37,6 +37,7 @@ from ..models.trigger import (
     COND_PRESENT,
 )
 from ..vision import capture, detector
+from .key_capture import KeyCaptureEdit
 from .region_selector import RegionSelector
 
 
@@ -93,7 +94,7 @@ class BuffItemDialog(QDialog):
         self._action.addItem("Run macro", ACTION_RUN_MACRO)
         self._action.setCurrentIndex(0 if self._item.action == ACTION_PRESS_KEY else 1)
         self._action.currentIndexChanged.connect(self._sync)
-        self._action_key = QLineEdit(self._item.action_key)
+        self._action_key = KeyCaptureEdit(self._item.action_key)
         self._action_macro = QLineEdit(self._item.action_macro_path)
         btn_browse = QPushButton("Browse…")
         btn_browse.clicked.connect(self._browse_macro)
@@ -201,7 +202,7 @@ class BuffItemDialog(QDialog):
         it.match_threshold = float(self._threshold.value())
         it.condition = self._condition.currentData()
         it.action = self._action.currentData()
-        it.action_key = self._action_key.text() or "1"
+        it.action_key = self._action_key.keystroke() or "1"
         it.action_macro_path = self._action_macro.text()
         it.cooldown_s = float(self._cooldown.value())
         return it

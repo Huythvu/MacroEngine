@@ -43,8 +43,12 @@ red, press the potion key."*
   preview** and a **Test** readout (detected? + match score) so you can verify before
   relying on it.
 - **Auto inputs (timed repeaters)** — a simple auto-clicker / auto-presser: fire a
-  key, a click, or a whole macro on a repeating **interval** (with optional random
-  **jitter**). Independent of recording — several can run at once, each on its own timer.
+  key/combo, **type a string**, a click, or a whole macro on a repeating **interval**
+  (with optional random **jitter**). Independent of recording — several can run at
+  once, each on its own timer.
+- **Keys & combos everywhere** — every action-key field (triggers, buffs, auto inputs)
+  takes a full keystroke: single keys, special keys (Esc/Backspace/F-keys), lone
+  modifiers (Alt/Ctrl), and combos (Ctrl+C, Alt+F4) — captured by pressing them.
 - **No typing coordinates** — *Add Click*, click positions, and region/trigger setup
   let you pick positions by clicking directly on the screen.
 
@@ -121,7 +125,9 @@ manually: `python tools/make_icon.py assets/icon_source.png`. See `assets/README
 3. Choose detection:
    - *Template* → **Capture Snapshot from Region**, then pick **absent**/**present**.
    - *Color* → set the HSV band + ratio threshold and **above**/**below**.
-4. Choose the action (press a key, or run a macro) and a cooldown.
+4. Choose the action (press a key/combo, or run a macro) and a cooldown. The key
+   field has a **Capture** button — press the actual key/combo (incl. Esc, Alt,
+   Ctrl+C…) instead of typing its name.
 5. Click **Start monitoring**. `Esc` stops it.
 
 ### Buff groups (watch several buffs on one bar)
@@ -147,8 +153,14 @@ An **auto-clicker / auto-presser**: fire a single action on a repeating timer,
 independent of recorded macros and vision. Several can run at once, each on its own
 interval.
 1. In the **Auto inputs** panel click **Add**.
-2. Pick the action: **Press key**, **Click at position** (pick the spot on screen —
-   no typing coordinates), or **Run macro**.
+2. Pick the action:
+   - **Press key / combo** — click **Capture** and press the key you want; works for
+     letters/digits, special keys (**Esc, Backspace, Tab, Enter, F1–F12**), lone
+     modifiers (**Alt, Ctrl, Shift**), and combos (**Ctrl+C, Alt+F4**). You can also
+     type the spec directly, e.g. `ctrl+shift+a`.
+   - **Type text** — types a whole string in one go (e.g. `123asd`, or a chat message).
+   - **Click at position** (pick the spot on screen — no typing coordinates).
+   - **Run macro**.
 3. Set the **Interval** (seconds; supports fractions like `0.1`) and optional
    **Jitter ±** — a random amount added to each interval so the timing isn't perfectly
    robotic.

@@ -34,6 +34,7 @@ from ..models.trigger import (
     Trigger,
 )
 from ..vision import capture, detector
+from .key_capture import KeyCaptureEdit
 from .region_selector import RegionSelector
 
 
@@ -120,7 +121,7 @@ class TriggerDialog(QDialog):
             0 if self._trigger.action == ACTION_PRESS_KEY else 1
         )
         self._action.currentIndexChanged.connect(self._sync_visibility)
-        self._action_key = QLineEdit(self._trigger.action_key)
+        self._action_key = KeyCaptureEdit(self._trigger.action_key)
         self._action_macro = QLineEdit(self._trigger.action_macro_path)
         btn_browse = QPushButton("Browse…")
         btn_browse.clicked.connect(self._browse_macro)
@@ -233,7 +234,7 @@ class TriggerDialog(QDialog):
         t.condition = self._condition.currentData()
         t.ratio_threshold = float(self._ratio_threshold.value())
         t.action = self._action.currentData()
-        t.action_key = self._action_key.text() or "1"
+        t.action_key = self._action_key.keystroke() or "1"
         t.action_macro_path = self._action_macro.text()
         t.cooldown_s = float(self._cooldown.value())
         return t
