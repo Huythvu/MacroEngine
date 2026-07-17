@@ -65,13 +65,25 @@ python -m macroengine.main
 
 ## Build a double-clickable `.exe` (no VS Code needed)
 
-On **Windows**, just **double-click `build_exe.bat`** (or run it from a terminal). It
-installs the dependencies, bundles everything with
-[PyInstaller](https://pyinstaller.org/), and produces a single file:
+On **Windows**, just **double-click `build_exe.bat`** in Explorer. It installs the
+dependencies, bundles everything with [PyInstaller](https://pyinstaller.org/), and
+produces a single file:
 
 ```
 dist\MacroEngine.exe
 ```
+
+Running it from a **terminal** instead? The command depends on which shell you have:
+
+```powershell
+.\build_exe.bat     # PowerShell (VS Code's default) — the .\ is required
+```
+```bat
+build_exe.bat       # Command Prompt (cmd.exe)
+```
+
+(PowerShell won't run a script from the current folder by name without the leading
+`.\` — that's normal, not an error.)
 
 Double-click that to launch the app — no Python or editor required. Right-click ▸
 **Run as administrator** if you need to control games that run elevated.
