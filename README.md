@@ -179,7 +179,13 @@ chain them on the **Routine** tab:
 3. Reorder with Move Up/Down, untick a step to skip it, set routine **Loops**
    (0 = forever), then **Run routine**. The current step highlights while running;
    `Esc` stops everything instantly.
-4. **Routine ▸ Save As… / Open…** stores the whole chain as a `.json`.
+4. **Save to library** — the routine is stored in your per-user routines folder and
+   shown in the **Saved routines** list on the left. Select one and **Open** (or
+   double-click) to load it, or **Open & Run** to launch it in one click. **Routine ▸
+   Save As… / Open…** still lets you use arbitrary file locations.
+
+Each tab has a one-line explainer at the top and a tooltip on hover describing what
+it's for.
 
 ### Auto inputs (timed repeaters)
 An **auto-clicker / auto-presser**: fire a single action on a repeating timer,

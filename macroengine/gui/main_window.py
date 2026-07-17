@@ -49,6 +49,14 @@ from .routine_panel import RoutinePanel
 from .trigger_dialog import TriggerDialog
 
 
+def _intro(text: str) -> QLabel:
+    """A small muted, wrapped one-line explainer shown at the top of a tab."""
+    label = QLabel(text)
+    label.setWordWrap(True)
+    label.setStyleSheet("color: palette(mid); padding: 2px 0 6px 0;")
+    return label
+
+
 class _Bridge(QObject):
     recorded = Signal(object)          # Macro
     playback_finished = Signal()
@@ -128,6 +136,10 @@ class MainWindow(QMainWindow):
 
         recorder_tab = QWidget()
         recorder_layout = QVBoxLayout(recorder_tab)
+        recorder_layout.addWidget(_intro(
+            "Record keyboard &amp; mouse into a macro, then replay it (looped if you "
+            "like). Edit the steps in the table below; save with Macro ▸ Save As."
+        ))
         recorder_layout.addLayout(controls)
         recorder_layout.addWidget(self._table)
 
@@ -138,14 +150,31 @@ class MainWindow(QMainWindow):
         watchers_tab = self._build_triggers_panel()
 
         tabs = QTabWidget()
-        tabs.addTab(recorder_tab, "Recorder")
-        tabs.addTab(self._routine_panel, "Routine")
-        tabs.addTab(watchers_tab, "Watchers && Auto")
+        i_rec = tabs.addTab(recorder_tab, "Recorder")
+        i_rou = tabs.addTab(self._routine_panel, "Routine")
+        i_wat = tabs.addTab(watchers_tab, "Watchers && Auto")
+        tabs.setTabToolTip(i_rec, "Record and play back a single macro (keyboard + mouse).")
+        tabs.setTabToolTip(
+            i_rou,
+            "Chain small saved macros with waits and 'wait until the screen shows X' "
+            "steps — great for dailies. Pick a saved routine on the left, or build one.",
+        )
+        tabs.setTabToolTip(
+            i_wat,
+            "React to the screen automatically: vision triggers & buff groups fire a "
+            "key when something appears/disappears; auto inputs repeat a key on a timer.",
+        )
         self.setCentralWidget(tabs)
 
     def _build_triggers_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
+        layout.addWidget(_intro(
+            "Standalone screen automation. <b>Triggers &amp; buff groups</b> watch a "
+            "region and press a key (or click the found image) when a condition holds; "
+            "<b>auto inputs</b> repeat a key/click on a timer. Toggle 'Start monitoring' "
+            "/ 'Start auto inputs'; Esc stops everything."
+        ))
         layout.addWidget(QLabel("<b>Vision triggers &amp; buff groups</b>"))
 
         self._trigger_list = QListWidget()
