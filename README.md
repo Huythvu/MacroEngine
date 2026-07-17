@@ -36,6 +36,12 @@ red, press the potion key."*
     (e.g. red); fire when the ratio goes **above**/**below** a threshold (HP low).
   - Action = press a key, or run a saved macro. Each trigger has a **cooldown** so it
     doesn't fire every poll tick.
+- **Buff groups** — watch one region (a buff bar) for **several buff icons at once**.
+  Each icon is searched for *anywhere* in the region, so it keeps working even when
+  buffs **shift or reorder** as they expire. Per buff: a captured icon, a
+  present/absent condition, its own key/macro, and a cooldown. Includes a **thumbnail
+  preview** and a **Test** readout (detected? + match score) so you can verify before
+  relying on it.
 - **No typing coordinates** — *Add Click* and region/trigger setup let you pick
   positions by clicking directly on the screen.
 
@@ -106,15 +112,32 @@ manually: `python tools/make_icon.py assets/icon_source.png`. See `assets/README
    **Add Click (pick on screen)…** which lets you *click where you want the macro to
    click* instead of typing coordinates. Use **Macro ▸ Save As…** to keep it.
 
-### Vision triggers
-1. In the **Vision triggers** panel click **Add**.
-2. **Select Region…** and drag a rectangle over the area to watch (e.g. the buff icon
-   or the HP bar).
+### Vision triggers (single watcher)
+1. In the panel click **Add Trigger**.
+2. **Select Region…** and drag a rectangle over the area to watch (e.g. the HP bar).
 3. Choose detection:
    - *Template* → **Capture Snapshot from Region**, then pick **absent**/**present**.
    - *Color* → set the HSV band + ratio threshold and **above**/**below**.
 4. Choose the action (press a key, or run a macro) and a cooldown.
 5. Click **Start monitoring**. `Esc` stops it.
+
+### Buff groups (watch several buffs on one bar)
+Best when your buff icons **shift/reorder** as buffs expire — each icon is matched
+*anywhere* inside the region.
+1. In the panel click **Add Buff Group**, give it a name, and **Select buff-bar
+   region…** — drag a box around the *whole* buff bar.
+2. Click **Add buff…**, then **Box the buff icon on screen…** and drag a tight box
+   around **one** buff icon (while that buff is active). You'll see a thumbnail.
+3. Set the buff's **Condition** (*Absent → act* = react when the buff runs out;
+   *Present → act* = react when it appears), its **key/macro**, **cooldown**, and
+   optionally tune the **match threshold**. Hit **Test now** — it reports
+   *DETECTED ✓ / not found ✗* with a score so you can confirm it works.
+4. Repeat **Add buff…** for each buff. Use **Test all** to check them together.
+5. **OK**, then **Start monitoring**. When a watched buff disappears (or appears), its
+   key/macro fires, throttled by its cooldown. `Esc` stops.
+
+Save/restore your triggers *and* buff groups together via **Watchers ▸ Save As… /
+Open…**.
 
 ## Windows notes / caveats
 

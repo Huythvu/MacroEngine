@@ -1,8 +1,11 @@
-"""Background loop that watches trigger regions and fires their actions.
+"""Background loop that watches regions and fires actions.
 
-Each tick it captures every enabled trigger's region, evaluates the condition
-(:func:`detector.condition_met`), and — if met and the trigger's cooldown has
-elapsed — performs the action (tap a key, or play a saved macro).
+Two kinds of watcher are evaluated each tick:
+  * plain triggers — one region + one condition (template or color),
+  * buff groups — one shared region searched for several buff icons at once.
+
+For each, when the condition holds and the item's cooldown has elapsed, the action
+runs (tap a key, or play a saved macro).
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from pynput import keyboard
 
 from ..core.keys import name_to_key
 from ..core.player import Player
+from ..models.buff import BuffGroup
 from ..models.macro import Macro
 from ..models.trigger import ACTION_PRESS_KEY, ACTION_RUN_MACRO, Trigger
 from . import capture, detector
@@ -26,10 +30,12 @@ class Monitor:
     def __init__(
         self,
         triggers: List[Trigger],
+        groups: Optional[List[BuffGroup]] = None,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
-        on_fire: Optional[Callable[[Trigger], None]] = None,
+        on_fire: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._triggers = triggers
+        self._groups = groups if groups is not None else []
         self._poll_interval = poll_interval
         self._on_fire = on_fire
         self._kbd = keyboard.Controller()
@@ -67,6 +73,15 @@ class Monitor:
                     self._evaluate(trig)
                 except Exception:  # a bad region/template must not kill the loop
                     continue
+            for group in list(self._groups):
+                if self._stop.is_set():
+                    break
+                if not group.enabled:
+                    continue
+                try:
+                    self._evaluate_group(group)
+                except Exception:
+                    continue
             # Pace the loop.
             elapsed = time.perf_counter() - tick
             if elapsed < self._poll_interval:
@@ -76,23 +91,39 @@ class Monitor:
         image = capture.grab_region(trig.region)
         if not detector.condition_met(trig, image):
             return
-        now = time.perf_counter()
-        last = self._last_fire.get(id(trig), 0.0)
-        if now - last < trig.cooldown_s:
-            return
-        self._last_fire[id(trig)] = now
-        self._fire(trig)
+        if self._cooldown_ok(id(trig), trig.cooldown_s):
+            self._do_action(trig.action, trig.action_key, trig.action_macro_path, trig.name)
 
-    def _fire(self, trig: Trigger) -> None:
-        if trig.action == ACTION_PRESS_KEY:
-            key = name_to_key(trig.action_key)
-            self._kbd.press(key)
-            self._kbd.release(key)
-        elif trig.action == ACTION_RUN_MACRO:
-            if trig.action_macro_path and not self._player.running:
+    def _evaluate_group(self, group: BuffGroup) -> None:
+        # Capture the shared bar region once, then test every buff icon against it.
+        image = capture.grab_region(group.region)
+        for item in group.items:
+            if not item.enabled:
+                continue
+            met, _score, _present = detector.buff_item_met(item, image)
+            if not met:
+                continue
+            if self._cooldown_ok(id(item), item.cooldown_s):
+                label = f"{group.name}/{item.name}"
+                self._do_action(item.action, item.action_key, item.action_macro_path, label)
+
+    def _cooldown_ok(self, key: int, cooldown_s: float) -> bool:
+        now = time.perf_counter()
+        if now - self._last_fire.get(key, 0.0) < cooldown_s:
+            return False
+        self._last_fire[key] = now
+        return True
+
+    def _do_action(self, action: str, key: str, macro_path: str, label: str) -> None:
+        if action == ACTION_PRESS_KEY:
+            k = name_to_key(key)
+            self._kbd.press(k)
+            self._kbd.release(k)
+        elif action == ACTION_RUN_MACRO:
+            if macro_path and not self._player.running:
                 try:
-                    self._player.play(Macro.load(trig.action_macro_path))
+                    self._player.play(Macro.load(macro_path))
                 except Exception:
                     pass
         if self._on_fire is not None:
-            self._on_fire(trig)
+            self._on_fire(label)

@@ -66,13 +66,42 @@ def color_ratio(
     return float(np.count_nonzero(mask)) / float(total)
 
 
+def template_present(
+    image_bgr: np.ndarray, template_png: Optional[bytes], threshold: float
+) -> Tuple[bool, float]:
+    """Return ``(present, best_score)`` for a stored template inside ``image``.
+
+    ``present`` is the best match score meeting ``threshold``. The score is also
+    returned so callers (e.g. the Test button) can show how strong the match is.
+    """
+    if not template_png:
+        return (False, 0.0)
+    score = template_match(image_bgr, decode_png(template_png))
+    return (score >= threshold, score)
+
+
+def buff_item_met(item, image_bgr: np.ndarray) -> Tuple[bool, float, bool]:
+    """Evaluate one buff item against a captured group-region image.
+
+    Returns ``(condition_met, score, present)``. Reused by the monitor loop and
+    by the dialog's Test button so live behavior and the preview agree exactly.
+    """
+    present, score = template_present(image_bgr, item.template_png, item.match_threshold)
+    if item.condition == COND_PRESENT:
+        met = present
+    elif item.condition == COND_ABSENT:
+        met = not present
+    else:
+        met = False
+    return (met, score, present)
+
+
 def condition_met(trigger: Trigger, image_bgr: np.ndarray) -> bool:
     """Evaluate a trigger's condition against a captured region image."""
     if trigger.detection == DETECT_TEMPLATE:
-        if not trigger.template_png:
-            return False
-        score = template_match(image_bgr, decode_png(trigger.template_png))
-        present = score >= trigger.match_threshold
+        present, _ = template_present(
+            image_bgr, trigger.template_png, trigger.match_threshold
+        )
         if trigger.condition == COND_PRESENT:
             return present
         if trigger.condition == COND_ABSENT:

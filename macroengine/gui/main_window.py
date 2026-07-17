@@ -35,9 +35,12 @@ from ..core.hotkeys import (
 )
 from ..core.player import Player
 from ..core.recorder import Recorder
+from ..models.buff import BuffGroup
 from ..models.macro import Macro
-from ..models.trigger import Trigger, load_triggers, save_triggers
+from ..models.store import load_watchers, save_watchers
+from ..models.trigger import Trigger
 from ..vision.monitor import Monitor
+from .buff_group_dialog import BuffGroupDialog
 from .macro_table import MacroTableModel, MacroTableView
 from .trigger_dialog import TriggerDialog
 
@@ -60,6 +63,8 @@ class MainWindow(QMainWindow):
         self._macro = Macro()
         self._model = MacroTableModel(self._macro)
         self._triggers: List[Trigger] = []
+        self._groups: List[BuffGroup] = []
+        self._rows: List[tuple] = []
 
         self._recorder: Optional[Recorder] = None
         self._player = Player(on_finished=lambda: self._bridge.playback_finished.emit())
@@ -132,19 +137,21 @@ class MainWindow(QMainWindow):
     def _build_triggers_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.addWidget(QLabel("<b>Vision triggers</b>"))
+        layout.addWidget(QLabel("<b>Vision triggers &amp; buff groups</b>"))
 
         self._trigger_list = QListWidget()
         layout.addWidget(self._trigger_list, 1)
 
         btns = QHBoxLayout()
-        btn_add = QPushButton("Add")
+        btn_add = QPushButton("Add Trigger")
+        btn_group = QPushButton("Add Buff Group")
         btn_edit = QPushButton("Edit")
         btn_remove = QPushButton("Remove")
         btn_add.clicked.connect(self._add_trigger)
-        btn_edit.clicked.connect(self._edit_trigger)
-        btn_remove.clicked.connect(self._remove_trigger)
-        for b in (btn_add, btn_edit, btn_remove):
+        btn_group.clicked.connect(self._add_group)
+        btn_edit.clicked.connect(self._edit_selected)
+        btn_remove.clicked.connect(self._remove_selected)
+        for b in (btn_add, btn_group, btn_edit, btn_remove):
             btns.addWidget(b)
         layout.addLayout(btns)
 
@@ -160,7 +167,7 @@ class MainWindow(QMainWindow):
         m.addAction("New", self._new_macro)
         m.addAction("Open…", self._open_macro)
         m.addAction("Save As…", self._save_macro)
-        t = self.menuBar().addMenu("&Triggers")
+        t = self.menuBar().addMenu("&Watchers")
         t.addAction("Open…", self._open_triggers)
         t.addAction("Save As…", self._save_triggers)
 
@@ -211,12 +218,22 @@ class MainWindow(QMainWindow):
             self._btn_monitor.setText("Start monitoring")
         self._set_status("Stopped")
 
-    # -- triggers -----------------------------------------------------------
+    # -- triggers & buff groups ---------------------------------------------
     def _refresh_triggers(self) -> None:
+        # List triggers first, then buff groups. self._rows keeps the row->object
+        # mapping so Edit/Remove can dispatch to the right dialog.
         self._trigger_list.clear()
+        self._rows: List[tuple] = []
         for t in self._triggers:
-            item = QListWidgetItem(f"{'●' if t.enabled else '○'} {t.name} — {t.describe()}")
-            self._trigger_list.addItem(item)
+            self._trigger_list.addItem(
+                QListWidgetItem(f"{'●' if t.enabled else '○'} [trigger] {t.name} — {t.describe()}")
+            )
+            self._rows.append(("trigger", t))
+        for g in self._groups:
+            self._trigger_list.addItem(
+                QListWidgetItem(f"{'●' if g.enabled else '○'} [buffs] {g.describe()}")
+            )
+            self._rows.append(("group", g))
 
     def _add_trigger(self) -> None:
         dlg = TriggerDialog(parent=self)
@@ -224,20 +241,34 @@ class MainWindow(QMainWindow):
             self._triggers.append(dlg.get_trigger())
             self._refresh_triggers()
 
-    def _edit_trigger(self) -> None:
-        row = self._trigger_list.currentRow()
-        if row < 0:
-            return
-        dlg = TriggerDialog(trigger=self._triggers[row], parent=self)
+    def _add_group(self) -> None:
+        dlg = BuffGroupDialog(parent=self)
         if dlg.exec():
-            self._triggers[row] = dlg.get_trigger()
+            self._groups.append(dlg.get_group())
             self._refresh_triggers()
 
-    def _remove_trigger(self) -> None:
+    def _edit_selected(self) -> None:
         row = self._trigger_list.currentRow()
-        if row >= 0:
-            del self._triggers[row]
-            self._refresh_triggers()
+        if row < 0 or row >= len(self._rows):
+            return
+        kind, obj = self._rows[row]
+        if kind == "trigger":
+            dlg = TriggerDialog(trigger=obj, parent=self)
+            if dlg.exec():
+                self._triggers[self._triggers.index(obj)] = dlg.get_trigger()
+        else:
+            dlg = BuffGroupDialog(group=obj, parent=self)
+            if dlg.exec():
+                self._groups[self._groups.index(obj)] = dlg.get_group()
+        self._refresh_triggers()
+
+    def _remove_selected(self) -> None:
+        row = self._trigger_list.currentRow()
+        if row < 0 or row >= len(self._rows):
+            return
+        kind, obj = self._rows[row]
+        (self._triggers if kind == "trigger" else self._groups).remove(obj)
+        self._refresh_triggers()
 
     def _toggle_monitor(self) -> None:
         if self._monitor and self._monitor.running:
@@ -246,20 +277,21 @@ class MainWindow(QMainWindow):
             self._btn_monitor.setText("Start monitoring")
             self._set_status("Monitoring stopped")
             return
-        if not self._triggers:
+        if not self._triggers and not self._groups:
             self._btn_monitor.setChecked(False)
-            self._set_status("Add a trigger before monitoring")
+            self._set_status("Add a trigger or buff group before monitoring")
             return
         self._monitor = Monitor(
             self._triggers,
-            on_fire=lambda t: self._bridge.trigger_fired.emit(t.name),
+            groups=self._groups,
+            on_fire=lambda label: self._bridge.trigger_fired.emit(label),
         )
         self._monitor.start()
         self._btn_monitor.setText("Stop monitoring")
         self._set_status("Monitoring…")
 
     def _on_trigger_fired(self, name: str) -> None:
-        self._set_status(f"Trigger fired: {name}")
+        self._set_status(f"Fired: {name}")
 
     # -- file ops -----------------------------------------------------------
     def _new_macro(self) -> None:
@@ -298,12 +330,12 @@ class MainWindow(QMainWindow):
 
     def _open_triggers(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open triggers", "", "Trigger files (*.json);;All files (*)"
+            self, "Open watchers", "", "Watcher files (*.json);;All files (*)"
         )
         if not path:
             return
         try:
-            self._triggers = load_triggers(path)
+            self._triggers, self._groups = load_watchers(path)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Open failed", str(exc))
             return
@@ -312,12 +344,12 @@ class MainWindow(QMainWindow):
 
     def _save_triggers(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save triggers", "triggers.json", "Trigger files (*.json)"
+            self, "Save watchers", "watchers.json", "Watcher files (*.json)"
         )
         if not path:
             return
         try:
-            save_triggers(self._triggers, path)
+            save_watchers(self._triggers, self._groups, path)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Save failed", str(exc))
             return
