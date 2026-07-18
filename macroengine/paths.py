@@ -39,6 +39,11 @@ def macros_dir() -> Path:
     return path
 
 
+def watchers_file() -> Path:
+    """The auto-saved watchers session (triggers + buff groups + auto inputs)."""
+    return app_data_dir() / "watchers.json"
+
+
 def safe_filename(name: str) -> str:
     """Turn a routine name into a safe file stem."""
     keep = "".join(c if (c.isalnum() or c in " -_.") else "_" for c in name).strip()

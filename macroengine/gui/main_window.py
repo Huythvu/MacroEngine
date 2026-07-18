@@ -44,10 +44,11 @@ from ..models.buff import BuffGroup
 from ..models.macro import Macro
 from ..models.store import load_watchers, save_watchers
 from ..models.trigger import Trigger
-from ..paths import macros_dir, safe_filename
+from ..paths import macros_dir, safe_filename, watchers_file
 from ..vision.monitor import Monitor
 from .auto_input_dialog import AutoInputDialog
 from .buff_group_dialog import BuffGroupDialog
+from .editable_list import EditableListPanel
 from .library_panel import LibraryPanel
 from .macro_table import MacroTableModel, MacroTableView
 from .routine_panel import RoutinePanel
@@ -100,7 +101,26 @@ class MainWindow(QMainWindow):
             on_panic=lambda: self._bridge.hotkey_panic.emit(),
         )
         self._hotkeys.start()
+        self._load_session()
         self._set_status("Ready")
+
+    def _load_session(self) -> None:
+        """Restore triggers, buff groups and auto inputs from the last session."""
+        path = watchers_file()
+        if not path.exists():
+            return
+        try:
+            self._triggers, self._groups, self._auto_inputs = load_watchers(path)
+        except Exception:  # noqa: BLE001
+            return
+        self._refresh_triggers()
+        self._refresh_autos()
+
+    def _save_session(self) -> None:
+        try:
+            save_watchers(self._triggers, self._groups, watchers_file(), self._auto_inputs)
+        except Exception:  # noqa: BLE001
+            pass
 
     # -- UI construction ----------------------------------------------------
     def _build_ui(self) -> None:
@@ -254,20 +274,15 @@ class MainWindow(QMainWindow):
 
         # -- Auto inputs (timed repeaters) ----------------------------------
         layout.addWidget(QLabel("<b>Auto inputs (timed)</b>"))
-        self._auto_list = QListWidget()
-        self._auto_list.itemChanged.connect(self._auto_check_changed)
-        layout.addWidget(self._auto_list, 1)
-
-        auto_btns = QHBoxLayout()
-        a_add = QPushButton("Add")
-        a_edit = QPushButton("Edit")
-        a_remove = QPushButton("Remove")
-        a_add.clicked.connect(self._add_auto)
-        a_edit.clicked.connect(self._edit_auto)
-        a_remove.clicked.connect(self._remove_auto)
-        for b in (a_add, a_edit, a_remove):
-            auto_btns.addWidget(b)
-        layout.addLayout(auto_btns)
+        self._auto_panel = EditableListPanel(
+            self._auto_inputs,
+            describe=lambda a: a.describe(),
+            add_buttons=[("Add", self._make_auto)],
+            on_edit=self._edit_auto_item,
+            on_changed=self._save_session,
+            reorderable=False,
+        )
+        layout.addWidget(self._auto_panel, 1)
 
         self._btn_auto = QPushButton("Start auto inputs")
         self._btn_auto.setCheckable(True)
@@ -286,8 +301,8 @@ class MainWindow(QMainWindow):
         r.addAction("Open…", self._routine_panel.open_routine)
         r.addAction("Save As…", self._routine_panel.save_routine)
         t = self.menuBar().addMenu("&Watchers")
-        t.addAction("Open…", self._open_triggers)
-        t.addAction("Save As…", self._save_triggers)
+        t.addAction("Import…", self._open_triggers)
+        t.addAction("Export…", self._save_triggers)
 
     # -- recorder / player --------------------------------------------------
     def _toggle_record(self, from_button: bool = False) -> None:
@@ -442,37 +457,15 @@ class MainWindow(QMainWindow):
 
     # -- auto inputs --------------------------------------------------------
     def _refresh_autos(self) -> None:
-        self._auto_list.blockSignals(True)
-        self._auto_list.clear()
-        for a in self._auto_inputs:
-            self._add_checkable(self._auto_list, a.describe(), a.enabled)
-        self._auto_list.blockSignals(False)
+        self._auto_panel.set_items(self._auto_inputs)
 
-    def _auto_check_changed(self, item: QListWidgetItem) -> None:
-        row = self._auto_list.row(item)
-        if 0 <= row < len(self._auto_inputs):
-            self._auto_inputs[row].enabled = item.checkState() == Qt.Checked
-
-    def _add_auto(self) -> None:
+    def _make_auto(self):
         dlg = AutoInputDialog(parent=self)
-        if dlg.exec():
-            self._auto_inputs.append(dlg.get_auto())
-            self._refresh_autos()
+        return dlg.get_auto() if dlg.exec() else None
 
-    def _edit_auto(self) -> None:
-        row = self._auto_list.currentRow()
-        if row < 0:
-            return
-        dlg = AutoInputDialog(auto=self._auto_inputs[row], parent=self)
-        if dlg.exec():
-            self._auto_inputs[row] = dlg.get_auto()
-            self._refresh_autos()
-
-    def _remove_auto(self) -> None:
-        row = self._auto_list.currentRow()
-        if row >= 0:
-            del self._auto_inputs[row]
-            self._refresh_autos()
+    def _edit_auto_item(self, auto):
+        dlg = AutoInputDialog(auto=auto, parent=self)
+        return dlg.get_auto() if dlg.exec() else None
 
     def _toggle_autos(self) -> None:
         if self._auto_runner and self._auto_runner.running:
@@ -571,5 +564,6 @@ class MainWindow(QMainWindow):
             self._routine_panel.stop()
         if self._recorder and self._recorder.running:
             self._recorder.stop()
+        self._save_session()
         self._hotkeys.stop()
         super().closeEvent(event)
