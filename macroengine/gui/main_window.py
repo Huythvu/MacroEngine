@@ -364,13 +364,16 @@ class MainWindow(QMainWindow):
         self._set_status(f"Saved macro '{self._macro.name}' to library")
 
     def _build_triggers_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.addWidget(QLabel("<b>Vision triggers &amp; buff groups</b>"))
+        # -- Left: vision triggers & buff groups ----------------------------
+        watchers = QWidget()
+        w_layout = QVBoxLayout(watchers)
+        w_layout.setContentsMargins(0, 0, 0, 0)
+        w_layout.addWidget(QLabel("<b>Vision triggers &amp; buff groups</b>"))
 
         self._trigger_list = QListWidget()
+        self._trigger_list.setMinimumWidth(120)
         self._trigger_list.itemChanged.connect(self._watcher_check_changed)
-        layout.addWidget(self._trigger_list, 1)
+        w_layout.addWidget(self._trigger_list, 1)
 
         btns = FlowLayout(spacing=4)
         btn_add = QPushButton("Add Trigger")
@@ -383,15 +386,18 @@ class MainWindow(QMainWindow):
         btn_remove.clicked.connect(self._remove_selected)
         for b in (btn_add, btn_group, btn_edit, btn_remove):
             btns.addWidget(b)
-        layout.addLayout(btns)
+        w_layout.addLayout(btns)
 
         self._btn_monitor = QPushButton("Start monitoring")
         self._btn_monitor.setCheckable(True)
         self._btn_monitor.clicked.connect(self._toggle_monitor)
-        layout.addWidget(self._btn_monitor)
+        w_layout.addWidget(self._btn_monitor)
 
-        # -- Auto inputs (timed repeaters) ----------------------------------
-        layout.addWidget(QLabel("<b>Auto inputs (timed)</b>"))
+        # -- Right: auto inputs (timed repeaters) ---------------------------
+        autos = QWidget()
+        a_layout = QVBoxLayout(autos)
+        a_layout.setContentsMargins(0, 0, 0, 0)
+        a_layout.addWidget(QLabel("<b>Auto inputs (timed)</b>"))
         self._auto_panel = EditableListPanel(
             self._auto_inputs,
             describe=lambda a: a.describe(),
@@ -400,14 +406,19 @@ class MainWindow(QMainWindow):
             on_changed=self._save_session,
             reorderable=False,
         )
-        layout.addWidget(self._auto_panel, 1)
+        a_layout.addWidget(self._auto_panel, 1)
 
         self._btn_auto = QPushButton("Start auto inputs")
         self._btn_auto.setCheckable(True)
         self._btn_auto.clicked.connect(self._toggle_autos)
-        layout.addWidget(self._btn_auto)
+        a_layout.addWidget(self._btn_auto)
 
-        return panel
+        split = QSplitter(Qt.Horizontal)
+        split.addWidget(watchers)
+        split.addWidget(autos)
+        split.setStretchFactor(0, 1)
+        split.setStretchFactor(1, 1)
+        return split
 
     def _build_menu(self) -> None:
         m = self.menuBar().addMenu("&Macro")
