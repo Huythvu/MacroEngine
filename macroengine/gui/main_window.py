@@ -30,12 +30,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.hotkeys import (
-    DEFAULT_PANIC,
-    DEFAULT_PLAY,
-    DEFAULT_RECORD,
-    HotkeyManager,
-)
+from ..config import event_names_for, load_settings, save_settings
+from ..core.hotkeys import HotkeyManager
 from ..core.autorunner import AutoRunner
 from ..core.player import Player
 from ..core.recorder import Recorder
@@ -56,6 +52,11 @@ from .trigger_dialog import TriggerDialog
 from .util import intro
 
 
+def _fmt(spec: str) -> str:
+    """'<f9>' -> 'F9' for button labels."""
+    return spec.strip().strip('<>').upper()
+
+
 class _Bridge(QObject):
     recorded = Signal(object)          # Macro
     playback_finished = Signal()
@@ -71,6 +72,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("MacroEngine")
         self.resize(900, 640)
 
+        self._settings = load_settings()
         self._macro = Macro()
         self._model = MacroTableModel(self._macro)
         self._triggers: List[Trigger] = []
@@ -94,15 +96,41 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._build_menu()
+        self._restore_geometry()
 
+        self._hotkeys: Optional[HotkeyManager] = None
+        self._start_hotkeys()
+        self._load_session()
+        self._set_status("Ready")
+
+    # -- settings / hotkeys -------------------------------------------------
+    def _hotkey_specs(self):
+        s = self._settings
+        return (s["record_hotkey"], s["play_hotkey"], s["panic_hotkey"])
+
+    def _start_hotkeys(self) -> None:
+        if self._hotkeys is not None:
+            self._hotkeys.stop()
+        rec, play, panic = self._hotkey_specs()
         self._hotkeys = HotkeyManager(
             on_record=lambda: self._bridge.hotkey_record.emit(),
             on_play=lambda: self._bridge.hotkey_play.emit(),
             on_panic=lambda: self._bridge.hotkey_panic.emit(),
+            record_key=rec, play_key=play, panic_key=panic,
         )
         self._hotkeys.start()
-        self._load_session()
-        self._set_status("Ready")
+        # Keep button labels in sync with the bound keys.
+        self._btn_record.setText(f"Record ({_fmt(rec)})")
+        self._btn_play.setText(f"Play ({_fmt(play)})")
+        self._btn_stop.setText(f"Stop ({_fmt(panic)})")
+
+    def _restore_geometry(self) -> None:
+        win = self._settings.get("window")
+        if isinstance(win, list) and len(win) == 4:
+            try:
+                self.setGeometry(int(win[0]), int(win[1]), int(win[2]), int(win[3]))
+            except Exception:  # noqa: BLE001
+                pass
 
     def _load_session(self) -> None:
         """Restore triggers, buff groups and auto inputs from the last session."""
@@ -125,9 +153,9 @@ class MainWindow(QMainWindow):
     # -- UI construction ----------------------------------------------------
     def _build_ui(self) -> None:
         # Recorder controls.
-        self._btn_record = QPushButton(f"Record ({DEFAULT_RECORD})")
-        self._btn_play = QPushButton(f"Play ({DEFAULT_PLAY})")
-        self._btn_stop = QPushButton(f"Stop ({DEFAULT_PANIC})")
+        self._btn_record = QPushButton("Record")
+        self._btn_play = QPushButton("Play")
+        self._btn_stop = QPushButton("Stop")
         self._btn_record.clicked.connect(lambda: self._toggle_record(from_button=True))
         self._btn_play.clicked.connect(self._toggle_play)
         self._btn_stop.clicked.connect(self._panic)
@@ -138,7 +166,7 @@ class MainWindow(QMainWindow):
         self._loop.setToolTip("Number of loops (0 = repeat forever until Stop)")
 
         self._record_moves = QCheckBox("Record mouse moves")
-        self._record_moves.setChecked(True)
+        self._record_moves.setChecked(self._settings["record_mouse_moves"])
 
         controls = QHBoxLayout()
         controls.addWidget(self._btn_record)
@@ -316,13 +344,16 @@ class MainWindow(QMainWindow):
             self._recorder = None
             macro.loop_count = self._loop.value()
             self._bridge.recorded.emit(macro)
-            self._btn_record.setText(f"Record ({DEFAULT_RECORD})")
+            self._btn_record.setText(f"Record ({_fmt(self._settings['record_hotkey'])})")
             self._set_status(f"Recorded {len(macro.events)} events")
             return
         if self._player.running:
             return
         self._record_started_from_button = from_button
-        self._recorder = Recorder(record_mouse_move=self._record_moves.isChecked())
+        self._recorder = Recorder(
+            record_mouse_move=self._record_moves.isChecked(),
+            ignored_keys=event_names_for(*self._hotkey_specs()),
+        )
         self._recorder.start()
         self._btn_record.setText("Stop recording")
         self._set_status("Recording… press again or F9 to stop")
@@ -346,7 +377,7 @@ class MainWindow(QMainWindow):
         self._player.play(self._macro)
 
     def _on_playback_finished(self) -> None:
-        self._btn_play.setText(f"Play ({DEFAULT_PLAY})")
+        self._btn_play.setText(f"Play ({_fmt(self._settings['play_hotkey'])})")
         self._set_status("Playback finished")
 
     def _panic(self) -> None:
@@ -565,5 +596,13 @@ class MainWindow(QMainWindow):
         if self._recorder and self._recorder.running:
             self._recorder.stop()
         self._save_session()
-        self._hotkeys.stop()
+        self._save_settings_now()
+        if self._hotkeys is not None:
+            self._hotkeys.stop()
         super().closeEvent(event)
+
+    def _save_settings_now(self) -> None:
+        geo = self.geometry()
+        self._settings["window"] = [geo.x(), geo.y(), geo.width(), geo.height()]
+        self._settings["record_mouse_moves"] = self._record_moves.isChecked()
+        save_settings(self._settings)
