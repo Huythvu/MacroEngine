@@ -5,6 +5,17 @@ REM  Requires Python 3.10+ installed and on PATH.
 REM  Produces:  dist\MacroEngine.exe   (a single double-clickable file)
 REM ============================================================
 
+REM --- Stop a running MacroEngine first ------------------------------------
+REM The app keeps running in the tray after closing its window (close-to-tray),
+REM which locks dist\MacroEngine.exe and makes the build fail with
+REM "Access is denied". Kill it so the exe can be replaced.
+tasklist /FI "IMAGENAME eq MacroEngine.exe" 2>nul | find /I "MacroEngine.exe" >nul
+if not errorlevel 1 (
+    echo Stopping the running MacroEngine so its exe can be replaced...
+    taskkill /IM MacroEngine.exe /F >nul 2>&1
+    timeout /t 2 /nobreak >nul
+)
+
 echo Installing dependencies...
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt pyinstaller Pillow
@@ -30,6 +41,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed ^
     --name MacroEngine ^
     %ICON_ARG% ^
     --add-data "assets;assets" ^
+    --hidden-import PySide6.QtNetwork ^
     --collect-submodules pynput ^
     --collect-submodules mss ^
     run.py
