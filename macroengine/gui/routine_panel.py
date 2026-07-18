@@ -33,7 +33,6 @@ from ..paths import routines_dir, safe_filename
 from .editable_list import EditableListPanel
 from .library_panel import LibraryPanel
 from .routine_step_dialogs import MacroStepDialog, VisionStepDialog, WaitStepDialog
-from .util import intro
 
 _STEP_PREFIX = {STEP_MACRO: "▶", STEP_WAIT: "⏲", STEP_WAIT_VISION: "👁"}
 
@@ -64,11 +63,6 @@ class RoutinePanel(QWidget):
         splitter.setStretchFactor(1, 3)
 
         root = QVBoxLayout(self)
-        root.addWidget(intro(
-            "Chain small saved macros into one sequence (e.g. a daily): play a macro → "
-            "wait → wait until the screen shows something → play the next. Pick a saved "
-            "routine on the left and <b>Open &amp; Run</b>, or build a new one on the right."
-        ))
         root.addWidget(splitter)
 
         self._library.refresh()

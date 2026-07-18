@@ -203,9 +203,9 @@ chain them on the **Routine** tab:
    double-click) to load it, or **Open & Run** to launch it in one click. **Routine ▸
    Save As… / Open…** still lets you use arbitrary file locations.
 
-Each tab has a one-line explainer at the top and a tooltip on hover describing what
-it's for. Your triggers, buff groups and auto inputs are **remembered between runs**
-automatically; **Watchers ▸ Import/Export** move a set to/from a file.
+Hover a tab to see a tooltip describing what it's for. Your triggers, buff groups and
+auto inputs are **remembered between runs** automatically; **Watchers ▸ Import/Export**
+move a set to/from a file.
 
 ### Auto inputs (timed repeaters)
 An **auto-clicker / auto-presser**: fire a single action on a repeating timer,

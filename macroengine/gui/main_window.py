@@ -55,7 +55,6 @@ from .log_panel import LogPanel
 from .macro_table import MacroTableModel, MacroTableView
 from .routine_panel import RoutinePanel
 from .trigger_dialog import TriggerDialog
-from .util import intro
 
 
 def _fmt(spec: str) -> str:
@@ -285,11 +284,6 @@ class MainWindow(QMainWindow):
 
         recorder_tab = QWidget()
         recorder_layout = QVBoxLayout(recorder_tab)
-        recorder_layout.addWidget(intro(
-            "Record keyboard &amp; mouse into a macro, then replay it (looped if you "
-            "like). Edit the steps in the table; <b>Save to library</b> to reuse it in "
-            "routines. Saved macros are on the left."
-        ))
         recorder_layout.addWidget(recorder_split)
 
         # Routine composer tab (chains saved macros with waits + vision checks).
@@ -371,12 +365,6 @@ class MainWindow(QMainWindow):
     def _build_triggers_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.addWidget(intro(
-            "Standalone screen automation. <b>Triggers &amp; buff groups</b> watch a "
-            "region and press a key (or click the found image) when a condition holds; "
-            "<b>auto inputs</b> repeat a key/click on a timer. Toggle 'Start monitoring' "
-            "/ 'Start auto inputs'; Esc stops everything."
-        ))
         layout.addWidget(QLabel("<b>Vision triggers &amp; buff groups</b>"))
 
         self._trigger_list = QListWidget()

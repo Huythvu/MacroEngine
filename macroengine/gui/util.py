@@ -19,11 +19,3 @@ def labeled(text: str, widget: QWidget) -> QWidget:
     row.addWidget(QLabel(text))
     row.addWidget(widget, 1)
     return wrap(row)
-
-
-def intro(text: str) -> QLabel:
-    """A muted, wrapped one-line explainer shown at the top of a tab/panel."""
-    label = QLabel(text)
-    label.setWordWrap(True)
-    label.setStyleSheet("color: palette(mid); padding: 2px 0 6px 0;")
-    return label
