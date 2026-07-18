@@ -37,11 +37,13 @@ class Monitor:
         groups: Optional[List[BuffGroup]] = None,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         on_fire: Optional[Callable[[str], None]] = None,
+        on_log: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._triggers = triggers
         self._groups = groups if groups is not None else []
         self._poll_interval = poll_interval
         self._on_fire = on_fire
+        self._on_log = on_log
         self._kbd = keyboard.Controller()
         self._mouse = mouse.Controller()
         self._player = Player()
@@ -65,6 +67,13 @@ class Monitor:
         self._stop.set()
         self._player.stop()
 
+    def _log(self, message: str) -> None:
+        import logging
+
+        logging.getLogger("macroengine.monitor").warning(message)
+        if self._on_log is not None:
+            self._on_log(message)
+
     # -- worker -------------------------------------------------------------
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -76,11 +85,8 @@ class Monitor:
                     continue
                 try:
                     self._evaluate(trig)
-                # TODO(audit): swallowing every exception hides real problems
-                # (bad region, capture failure). Route through the logging
-                # module (the app currently has no logging at all).
-                except Exception:  # a bad region/template must not kill the loop
-                    continue
+                except Exception as exc:  # a bad region/template must not kill the loop
+                    self._log(f"trigger '{trig.name}' error: {exc}")
             for group in list(self._groups):
                 if self._stop.is_set():
                     break
@@ -88,8 +94,8 @@ class Monitor:
                     continue
                 try:
                     self._evaluate_group(group)
-                except Exception:
-                    continue
+                except Exception as exc:
+                    self._log(f"buff group '{group.name}' error: {exc}")
             # Pace the loop.
             elapsed = time.perf_counter() - tick
             if elapsed < self._poll_interval:

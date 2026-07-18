@@ -14,6 +14,7 @@ from typing import List, Optional
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QDockWidget,
     QFileDialog,
     QHBoxLayout,
     QInputDialog,
@@ -46,6 +47,7 @@ from .auto_input_dialog import AutoInputDialog
 from .buff_group_dialog import BuffGroupDialog
 from .editable_list import EditableListPanel
 from .library_panel import LibraryPanel
+from .log_panel import LogPanel
 from .macro_table import MacroTableModel, MacroTableView
 from .routine_panel import RoutinePanel
 from .trigger_dialog import TriggerDialog
@@ -61,6 +63,7 @@ class _Bridge(QObject):
     recorded = Signal(object)          # Macro
     playback_finished = Signal()
     trigger_fired = Signal(str)
+    log_line = Signal(str)
     hotkey_record = Signal()
     hotkey_play = Signal()
     hotkey_panic = Signal()
@@ -94,6 +97,7 @@ class MainWindow(QMainWindow):
         self._bridge.recorded.connect(self._on_recorded)
         self._bridge.playback_finished.connect(self._on_playback_finished)
         self._bridge.trigger_fired.connect(self._on_trigger_fired)
+        self._bridge.log_line.connect(self._append_log)
         self._bridge.hotkey_record.connect(self._toggle_record)
         self._bridge.hotkey_play.connect(self._toggle_play)
         self._bridge.hotkey_panic.connect(self._panic)
@@ -231,6 +235,16 @@ class MainWindow(QMainWindow):
             "key when something appears/disappears; auto inputs repeat a key on a timer.",
         )
         self.setCentralWidget(tabs)
+
+        # Activity log dock (visible across all tabs).
+        self._log = LogPanel()
+        dock = QDockWidget("Activity log", self)
+        dock.setWidget(self._log)
+        dock.setObjectName("activity_log")
+        self.addDockWidget(Qt.BottomDockWidgetArea, dock)
+
+    def _append_log(self, text: str) -> None:
+        self._log.append_line(text)
 
     def _build_macro_library(self) -> QWidget:
         self._macro_library = LibraryPanel(
@@ -559,6 +573,7 @@ class MainWindow(QMainWindow):
             self._triggers,
             groups=self._groups,
             on_fire=lambda label: self._bridge.trigger_fired.emit(label),
+            on_log=lambda msg: self._bridge.log_line.emit(msg),
         )
         self._monitor.start()
         self._btn_monitor.setText("Stop monitoring")
@@ -665,6 +680,8 @@ class MainWindow(QMainWindow):
     # -- misc ---------------------------------------------------------------
     def _set_status(self, text: str) -> None:
         self.statusBar().showMessage(text)
+        if hasattr(self, "_log"):
+            self._log.append_line(text)
 
     def closeEvent(self, event) -> None:
         self._player.stop()
