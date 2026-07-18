@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -81,6 +81,10 @@ class MainWindow(QMainWindow):
         self._auto_inputs: List[AutoInput] = []
         self._auto_runner: Optional[AutoRunner] = None
         self._record_started_from_button = False
+        self._cd_timer: Optional[QTimer] = None
+        self._cd_done = None
+        self._cd_button = None
+        self._cd_base_label = None
 
         self._recorder: Optional[Recorder] = None
         self._player = Player(on_finished=lambda: self._bridge.playback_finished.emit())
@@ -124,6 +128,10 @@ class MainWindow(QMainWindow):
         self._btn_play.setText(f"Play ({_fmt(play)})")
         self._btn_stop.setText(f"Stop ({_fmt(panic)})")
 
+    def _apply_overlay_setting(self) -> None:
+        # Filled in when the status overlay is wired up.
+        pass
+
     def _restore_geometry(self) -> None:
         win = self._settings.get("window")
         if isinstance(win, list) and len(win) == 4:
@@ -157,7 +165,7 @@ class MainWindow(QMainWindow):
         self._btn_play = QPushButton("Play")
         self._btn_stop = QPushButton("Stop")
         self._btn_record.clicked.connect(lambda: self._toggle_record(from_button=True))
-        self._btn_play.clicked.connect(self._toggle_play)
+        self._btn_play.clicked.connect(lambda: self._toggle_play(from_button=True))
         self._btn_stop.clicked.connect(self._panic)
 
         self._loop = QSpinBox()
@@ -331,6 +339,20 @@ class MainWindow(QMainWindow):
         t = self.menuBar().addMenu("&Watchers")
         t.addAction("Import…", self._open_triggers)
         t.addAction("Export…", self._save_triggers)
+        o = self.menuBar().addMenu("&Options")
+        o.addAction("Settings…", self._open_settings)
+
+    def _open_settings(self) -> None:
+        from .settings_dialog import SettingsDialog
+
+        dlg = SettingsDialog(self._settings, parent=self)
+        if not dlg.exec():
+            return
+        dlg.apply_to(self._settings)
+        save_settings(self._settings)
+        self._start_hotkeys()  # rebind live
+        self._apply_overlay_setting()
+        self._set_status("Settings updated")
 
     # -- recorder / player --------------------------------------------------
     def _toggle_record(self, from_button: bool = False) -> None:
@@ -347,8 +369,19 @@ class MainWindow(QMainWindow):
             self._btn_record.setText(f"Record ({_fmt(self._settings['record_hotkey'])})")
             self._set_status(f"Recorded {len(macro.events)} events")
             return
+        if self._counting_down:
+            self._cancel_countdown()
+            self._set_status("Countdown cancelled")
+            return
         if self._player.running:
             return
+        cd = int(self._settings["countdown_s"])
+        if from_button and cd > 0:
+            self._start_countdown(cd, lambda: self._begin_record(from_button), self._btn_record)
+            return
+        self._begin_record(from_button)
+
+    def _begin_record(self, from_button: bool) -> None:
         self._record_started_from_button = from_button
         self._recorder = Recorder(
             record_mouse_move=self._record_moves.isChecked(),
@@ -356,25 +389,71 @@ class MainWindow(QMainWindow):
         )
         self._recorder.start()
         self._btn_record.setText("Stop recording")
-        self._set_status("Recording… press again or F9 to stop")
+        self._set_status("Recording… press again to stop")
 
     def _on_recorded(self, macro: Macro) -> None:
         self._macro = macro
         self._model.set_events(self._macro.events)
 
-    def _toggle_play(self) -> None:
+    def _toggle_play(self, from_button: bool = False) -> None:
         if self._player.running:
             self._panic()
+            return
+        if self._counting_down:
+            self._cancel_countdown()
+            self._set_status("Countdown cancelled")
             return
         if self._recorder and self._recorder.running:
             return
         if not self._macro.events:
             self._set_status("Nothing to play — record or open a macro first")
             return
+        cd = int(self._settings["countdown_s"])
+        if from_button and cd > 0:
+            self._start_countdown(cd, self._begin_play, self._btn_play)
+            return
+        self._begin_play()
+
+    def _begin_play(self) -> None:
         self._macro.loop_count = self._loop.value()
         self._btn_play.setText("Stop playing")
         self._set_status("Playing…")
         self._player.play(self._macro)
+
+    # -- countdown ----------------------------------------------------------
+    @property
+    def _counting_down(self) -> bool:
+        return self._cd_timer is not None
+
+    def _start_countdown(self, seconds: int, on_done, button) -> None:
+        self._cancel_countdown()
+        self._cd_remaining = seconds
+        self._cd_button = button
+        self._cd_base_label = button.text()
+        self._cd_done = on_done
+        self._cd_timer = QTimer(self)
+        self._cd_timer.timeout.connect(self._countdown_tick)
+        button.setText(f"Starting in {seconds}…")
+        self._set_status(f"Starting in {seconds}s… (click again or Stop to cancel)")
+        self._cd_timer.start(1000)
+
+    def _countdown_tick(self) -> None:
+        self._cd_remaining -= 1
+        if self._cd_remaining <= 0:
+            self._cancel_countdown(run=True)
+        elif self._cd_button is not None:
+            self._cd_button.setText(f"Starting in {self._cd_remaining}…")
+
+    def _cancel_countdown(self, run: bool = False) -> None:
+        if self._cd_timer is not None:
+            self._cd_timer.stop()
+            self._cd_timer = None
+        done, button, base = self._cd_done, self._cd_button, self._cd_base_label
+        self._cd_done = self._cd_button = self._cd_base_label = None
+        if button is not None and not run:
+            button.setText(base)
+        if run and done is not None:
+            done()
 
     def _on_playback_finished(self) -> None:
         self._btn_play.setText(f"Play ({_fmt(self._settings['play_hotkey'])})")
@@ -385,6 +464,8 @@ class MainWindow(QMainWindow):
         # RegionSelector/PointPicker overlays also lands here (harmless today —
         # just a "Stopped" status). Consider pausing the panic hotkey while an
         # overlay is open, or choosing a rarer default like Ctrl+Alt+Q.
+        if self._counting_down:
+            self._cancel_countdown()
         self._player.stop()
         if self._monitor and self._monitor.running:
             self._monitor.stop()
