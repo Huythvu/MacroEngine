@@ -50,6 +50,7 @@ from ..vision.monitor import Monitor
 from .auto_input_dialog import AutoInputDialog
 from .buff_group_dialog import BuffGroupDialog
 from .editable_list import EditableListPanel
+from .flow_layout import FlowLayout
 from .library_panel import LibraryPanel
 from .log_panel import LogPanel
 from .macro_table import MacroTableModel, MacroTableView
@@ -77,6 +78,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("MacroEngine")
         self.resize(900, 640)
+        self.setMinimumSize(380, 320)
         icon_path = app_icon_path()
         if icon_path:
             self.setWindowIcon(QIcon(icon_path))
@@ -255,17 +257,15 @@ class MainWindow(QMainWindow):
         self._loop.setValue(1)
         self._loop.setToolTip("Number of loops (0 = repeat forever until Stop)")
 
-        self._record_moves = QCheckBox("Record mouse moves")
+        self._record_moves = QCheckBox("Mouse moves")
+        self._record_moves.setToolTip("Record mouse movement (off = keyboard-only macros stay clean)")
         self._record_moves.setChecked(self._settings["record_mouse_moves"])
 
-        controls = QHBoxLayout()
-        controls.addWidget(self._btn_record)
-        controls.addWidget(self._btn_play)
-        controls.addWidget(self._btn_stop)
-        controls.addWidget(QLabel("Loops:"))
-        controls.addWidget(self._loop)
-        controls.addWidget(self._record_moves)
-        controls.addStretch(1)
+        loops_label = QLabel("Loops:")
+        controls = FlowLayout(spacing=4)
+        for w in (self._btn_record, self._btn_play, self._btn_stop,
+                  loops_label, self._loop, self._record_moves):
+            controls.addWidget(w)
 
         # Macro timeline.
         self._table = MacroTableView(self._model)
@@ -281,6 +281,7 @@ class MainWindow(QMainWindow):
         recorder_split.addWidget(recorder_body)
         recorder_split.setStretchFactor(0, 1)
         recorder_split.setStretchFactor(1, 3)
+        recorder_split.setCollapsible(0, True)  # drag the library shut for a narrow window
 
         recorder_tab = QWidget()
         recorder_layout = QVBoxLayout(recorder_tab)
@@ -326,7 +327,7 @@ class MainWindow(QMainWindow):
             name_of=lambda p: Macro.load(p).name,
             on_open=self._macro_open_path,
             on_run=self._macro_run_path,
-            extra_actions=[("Save to library", self._macro_lib_save)],
+            extra_actions=[("Save…", self._macro_lib_save)],
         )
         return self._macro_library
 
@@ -371,7 +372,7 @@ class MainWindow(QMainWindow):
         self._trigger_list.itemChanged.connect(self._watcher_check_changed)
         layout.addWidget(self._trigger_list, 1)
 
-        btns = QHBoxLayout()
+        btns = FlowLayout(spacing=4)
         btn_add = QPushButton("Add Trigger")
         btn_group = QPushButton("Add Buff Group")
         btn_edit = QPushButton("Edit")

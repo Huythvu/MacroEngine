@@ -12,7 +12,6 @@ from typing import Callable, List, Optional, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -21,6 +20,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .flow_layout import FlowLayout
 
 
 class LibraryPanel(QWidget):
@@ -43,31 +44,30 @@ class LibraryPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(f"<b>{title}</b>"))
         self._list = QListWidget()
+        self._list.setMinimumWidth(120)
         self._list.itemDoubleClicked.connect(lambda _i: self._open())
         layout.addWidget(self._list, 1)
 
-        row1 = QHBoxLayout()
+        buttons = FlowLayout(spacing=4)
         btn_open = QPushButton("Open")
         btn_open.clicked.connect(self._open)
-        row1.addWidget(btn_open)
+        buttons.addWidget(btn_open)
         if on_run is not None:
-            btn_run = QPushButton("Open & Run")
+            btn_run = QPushButton("Run")
+            btn_run.setToolTip("Open the selected item and run it")
             btn_run.clicked.connect(self._run)
-            row1.addWidget(btn_run)
-        layout.addLayout(row1)
-
-        row2 = QHBoxLayout()
+            buttons.addWidget(btn_run)
         for label, cb in (extra_actions or []):
             btn = QPushButton(label)
             btn.clicked.connect(cb)
-            row2.addWidget(btn)
+            buttons.addWidget(btn)
         btn_delete = QPushButton("Delete")
         btn_refresh = QPushButton("Refresh")
         btn_delete.clicked.connect(self._delete)
         btn_refresh.clicked.connect(self.refresh)
-        row2.addWidget(btn_delete)
-        row2.addWidget(btn_refresh)
-        layout.addLayout(row2)
+        buttons.addWidget(btn_delete)
+        buttons.addWidget(btn_refresh)
+        layout.addLayout(buttons)
 
         self.refresh()
 

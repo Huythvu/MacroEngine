@@ -12,13 +12,14 @@ from typing import Callable, List, Optional, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QHBoxLayout,
     QListWidget,
     QListWidgetItem,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
+
+from .flow_layout import FlowLayout
 
 # (label, factory) — factory() returns a new item, or None if cancelled.
 AddButton = Tuple[str, Callable[[], object]]
@@ -42,36 +43,34 @@ class EditableListPanel(QWidget):
         self._on_changed = on_changed
 
         self._list = QListWidget()
+        self._list.setMinimumWidth(120)
         self._list.itemChanged.connect(self._check_changed)
 
-        add_row = QHBoxLayout()
+        buttons = FlowLayout(spacing=4)
         for label, factory in add_buttons:
             btn = QPushButton(label)
             btn.clicked.connect(lambda _=False, f=factory: self._add(f))
-            add_row.addWidget(btn)
-        add_row.addStretch(1)
-
-        edit_row = QHBoxLayout()
+            buttons.addWidget(btn)
         btn_edit = QPushButton("Edit…")
         btn_remove = QPushButton("Remove")
         btn_edit.clicked.connect(self._edit)
         btn_remove.clicked.connect(self._remove)
-        edit_row.addWidget(btn_edit)
-        edit_row.addWidget(btn_remove)
+        buttons.addWidget(btn_edit)
+        buttons.addWidget(btn_remove)
         if reorderable:
-            btn_up = QPushButton("Move Up")
-            btn_down = QPushButton("Move Down")
+            btn_up = QPushButton("↑")
+            btn_down = QPushButton("↓")
+            btn_up.setToolTip("Move selected up")
+            btn_down.setToolTip("Move selected down")
             btn_up.clicked.connect(lambda: self._move(-1))
             btn_down.clicked.connect(lambda: self._move(1))
-            edit_row.addWidget(btn_up)
-            edit_row.addWidget(btn_down)
-        edit_row.addStretch(1)
+            buttons.addWidget(btn_up)
+            buttons.addWidget(btn_down)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._list, 1)
-        layout.addLayout(add_row)
-        layout.addLayout(edit_row)
+        layout.addLayout(buttons)
         self.refresh()
 
     # -- API -----------------------------------------------------------------

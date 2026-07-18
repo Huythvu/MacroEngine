@@ -103,7 +103,7 @@ class RoutinePanel(QWidget):
 
         file_row = QHBoxLayout()
         btn_new = QPushButton("New")
-        btn_save = QPushButton("Save to library")
+        btn_save = QPushButton("Save…")
         btn_new.clicked.connect(self.new_routine)
         btn_save.clicked.connect(self._save_to_library)
         file_row.addWidget(btn_new)

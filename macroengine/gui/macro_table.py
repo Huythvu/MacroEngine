@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from ..grouping import build_groups, group_describe, group_span_delay
 from ..models.event import KEY_DOWN, KEY_UP, MOUSE_CLICK, Event
 from ..models.macro import Macro
+from .flow_layout import FlowLayout
 from .region_selector import PointPicker
 
 _COLUMNS = ["#", "Type", "Details", "Delay (s)"]
@@ -173,27 +174,24 @@ class MacroTableView(QWidget):
         self._table.setColumnWidth(2, 320)
 
         btn_delete = QPushButton("Delete")
-        btn_up = QPushButton("Move Up")
-        btn_down = QPushButton("Move Down")
-        btn_key = QPushButton("Add Key Tap…")
-        btn_click = QPushButton("Add Click (pick on screen)…")
-        btn_copy = QPushButton("Copy")
-        btn_paste = QPushButton("Paste")
+        btn_up = QPushButton("↑")
+        btn_down = QPushButton("↓")
+        btn_key = QPushButton("Add Key…")
+        btn_click = QPushButton("Add Click…")
+        btn_up.setToolTip("Move selected row up")
+        btn_down.setToolTip("Move selected row down")
+        btn_click.setToolTip("Insert a click — pick the position on screen")
         btn_delete.clicked.connect(self._delete)
         btn_up.clicked.connect(lambda: self._move(-1))
         btn_down.clicked.connect(lambda: self._move(1))
         btn_key.clicked.connect(self._add_key)
         btn_click.clicked.connect(self._add_click)
-        btn_copy.clicked.connect(self._copy)
-        btn_paste.clicked.connect(self._paste)
-        btn_copy.setToolTip("Copy selected rows (Ctrl+C) — as text, and pasteable back in")
-        btn_paste.setToolTip("Paste copied events (Ctrl+V)")
 
-        # Standard clipboard shortcuts on the table.
+        # Clipboard is Ctrl+C / Ctrl+V (no dedicated buttons needed).
         QShortcut(QKeySequence.Copy, self._table, activated=self._copy)
         QShortcut(QKeySequence.Paste, self._table, activated=self._paste)
 
-        self._compact = QCheckBox("Compact view")
+        self._compact = QCheckBox("Compact")
         self._compact.setChecked(model.compact)
         self._compact.setToolTip(
             "Collapse held keys and mouse-move streams into single rows "
@@ -201,11 +199,9 @@ class MacroTableView(QWidget):
         )
         self._compact.toggled.connect(model.set_compact)
 
-        buttons = QHBoxLayout()
-        for b in (btn_delete, btn_up, btn_down, btn_key, btn_click, btn_copy, btn_paste):
+        buttons = FlowLayout(spacing=4)
+        for b in (btn_delete, btn_up, btn_down, btn_key, btn_click, self._compact):
             buttons.addWidget(b)
-        buttons.addStretch(1)
-        buttons.addWidget(self._compact)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._table)
