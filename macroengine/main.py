@@ -41,15 +41,43 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName("MacroEngine")
+    app.setQuitOnLastWindowClosed(False)  # keep running in the tray when hidden
     icon_path = app_icon_path()
     if icon_path:
         app.setWindowIcon(QIcon(icon_path))
 
+    # Single instance: if one is already running, tell it to show and exit.
+    from PySide6.QtNetwork import QLocalServer, QLocalSocket
+
+    key = "MacroEngine-single-instance"
+    probe = QLocalSocket()
+    probe.connectToServer(key)
+    if probe.waitForConnected(200):
+        probe.write(b"show")
+        probe.flush()
+        probe.waitForBytesWritten(300)
+        probe.disconnectFromServer()
+        return 0
+    QLocalServer.removeServer(key)  # clear a stale socket from a prior crash
+    server = QLocalServer()
+    server.listen(key)
+
     window = MainWindow()
     if icon_path:
         window.setWindowIcon(QIcon(icon_path))
+
+    def _on_second_instance() -> None:
+        conn = server.nextPendingConnection()
+        if conn is not None:
+            conn.readAll()
+            window.show_and_raise()
+
+    server.newConnection.connect(_on_second_instance)
+
     window.show()
-    return app.exec()
+    result = app.exec()
+    server.close()
+    return result
 
 
 if __name__ == "__main__":

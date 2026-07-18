@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
         menu.addAction("Start/stop monitoring", self._toggle_monitor)
         menu.addAction("Start/stop auto inputs", self._toggle_autos)
         menu.addSeparator()
-        menu.addAction("Quit", self._quit)
+        menu.addAction("Exit MacroEngine", self._quit)
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._tray_activated)
         self._tray.show()
@@ -206,15 +206,11 @@ class MainWindow(QMainWindow):
         self._quitting = True
         self.close()
 
-    def changeEvent(self, event) -> None:
-        # Minimize to tray instead of the taskbar (when a tray is available).
-        if (
-            event.type() == QEvent.WindowStateChange
-            and self.isMinimized()
-            and self._tray is not None
-        ):
-            QTimer.singleShot(0, self.hide)
-        super().changeEvent(event)
+    def show_and_raise(self) -> None:
+        """Bring the window to the front (used by the tray and second-launch)."""
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     def _restore_geometry(self) -> None:
         win = self._settings.get("window")
@@ -763,6 +759,16 @@ class MainWindow(QMainWindow):
             self._log.append_line(text)
 
     def closeEvent(self, event) -> None:
+        # Closing (X) hides to the tray; truly exit only via the tray's Exit item.
+        if self._tray is not None and not self._quitting:
+            event.ignore()
+            self.hide()
+            self._save_settings_now()  # remember size even before a real exit
+            self._tray.showMessage(
+                "MacroEngine", "Still running in the tray — right-click ▸ Exit to quit.",
+                QSystemTrayIcon.Information, 2500,
+            )
+            return
         self._player.stop()
         if self._monitor and self._monitor.running:
             self._monitor.stop()
@@ -781,6 +787,8 @@ class MainWindow(QMainWindow):
         if self._tray is not None:
             self._tray.hide()
         super().closeEvent(event)
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().quit()
 
     def _save_settings_now(self) -> None:
         geo = self.geometry()
