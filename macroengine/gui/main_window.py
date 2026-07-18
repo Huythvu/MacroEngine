@@ -11,7 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QCheckBox,
     QDockWidget,
@@ -22,10 +23,12 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
     QSplitter,
+    QSystemTrayIcon,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -42,6 +45,7 @@ from ..models.macro import Macro
 from ..models.store import load_watchers, save_watchers
 from ..models.trigger import Trigger
 from ..paths import macros_dir, safe_filename, watchers_file
+from ..resources import app_icon_path
 from ..vision.monitor import Monitor
 from .auto_input_dialog import AutoInputDialog
 from .buff_group_dialog import BuffGroupDialog
@@ -74,6 +78,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("MacroEngine")
         self.resize(900, 640)
+        icon_path = app_icon_path()
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
 
         self._settings = load_settings()
         self._macro = Macro()
@@ -109,6 +116,17 @@ class MainWindow(QMainWindow):
         self._hotkeys: Optional[HotkeyManager] = None
         self._start_hotkeys()
         self._load_session()
+
+        self._overlay = None
+        self._apply_overlay_setting()
+        self._overlay_timer = QTimer(self)
+        self._overlay_timer.timeout.connect(self._update_overlay)
+        self._overlay_timer.start(300)
+
+        self._tray = None
+        self._quitting = False
+        self._build_tray()
+
         self._set_status("Ready")
 
     # -- settings / hotkeys -------------------------------------------------
@@ -133,8 +151,69 @@ class MainWindow(QMainWindow):
         self._btn_stop.setText(f"Stop ({_fmt(panic)})")
 
     def _apply_overlay_setting(self) -> None:
-        # Filled in when the status overlay is wired up.
-        pass
+        from .overlay import StatusOverlay
+
+        enabled = bool(self._settings["overlay_enabled"])
+        if enabled and self._overlay is None:
+            self._overlay = StatusOverlay()
+        elif not enabled and self._overlay is not None:
+            self._overlay.hide()
+            self._overlay.deleteLater()
+            self._overlay = None
+        self._update_overlay()
+
+    def _update_overlay(self) -> None:
+        if self._overlay is None:
+            return
+        self._overlay.set_states(
+            recording=bool(self._recorder and self._recorder.running),
+            playing=self._player.running,
+            monitoring=bool(self._monitor and self._monitor.running),
+            auto=bool(self._auto_runner and self._auto_runner.running),
+        )
+
+    # -- system tray --------------------------------------------------------
+    def _build_tray(self) -> None:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        self._tray = QSystemTrayIcon(self.windowIcon() or QIcon(), self)
+        self._tray.setToolTip("MacroEngine")
+        menu = QMenu()
+        menu.addAction("Show / Hide", self._toggle_window)
+        menu.addSeparator()
+        menu.addAction("Start/stop monitoring", self._toggle_monitor)
+        menu.addAction("Start/stop auto inputs", self._toggle_autos)
+        menu.addSeparator()
+        menu.addAction("Quit", self._quit)
+        self._tray.setContextMenu(menu)
+        self._tray.activated.connect(self._tray_activated)
+        self._tray.show()
+
+    def _tray_activated(self, reason) -> None:
+        if reason == QSystemTrayIcon.DoubleClick:
+            self._toggle_window()
+
+    def _toggle_window(self) -> None:
+        if self.isVisible() and not self.isMinimized():
+            self.hide()
+        else:
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+
+    def _quit(self) -> None:
+        self._quitting = True
+        self.close()
+
+    def changeEvent(self, event) -> None:
+        # Minimize to tray instead of the taskbar (when a tray is available).
+        if (
+            event.type() == QEvent.WindowStateChange
+            and self.isMinimized()
+            and self._tray is not None
+        ):
+            QTimer.singleShot(0, self.hide)
+        super().changeEvent(event)
 
     def _restore_geometry(self) -> None:
         win = self._settings.get("window")
@@ -697,6 +776,10 @@ class MainWindow(QMainWindow):
         self._save_settings_now()
         if self._hotkeys is not None:
             self._hotkeys.stop()
+        if self._overlay is not None:
+            self._overlay.hide()
+        if self._tray is not None:
+            self._tray.hide()
         super().closeEvent(event)
 
     def _save_settings_now(self) -> None:

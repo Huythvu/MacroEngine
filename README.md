@@ -57,13 +57,28 @@ red, press the potion key."*
 
 ## Global hotkeys
 
-Work even when the game has focus:
+Work even when the game has focus (defaults — rebindable in **Options ▸ Settings**):
 
 | Key   | Action                                   |
 |-------|------------------------------------------|
 | `F9`  | Start / stop recording                   |
 | `F10` | Start / stop playback                    |
 | `Esc` | **Panic stop** — halt playback + monitoring |
+
+## Comfort features
+
+- **Settings** (Options ▸ Settings) — rebind the hotkeys (some games use F9/F10),
+  set a **start countdown** so clicking Record/Play gives you a few seconds to switch
+  to the game first (hotkey starts stay instant), and toggle the status overlay.
+- **Activity log** — a timestamped dock at the bottom shows what's happening (fires
+  with match info, playback start/stop, routine steps, and errors that used to be
+  silent). Also written to `<appdata>/MacroEngine/macroengine.log`.
+- **Status overlay** — a small always-on-top badge row (REC / PLAY / MON / AUTO) so
+  you can see the app's state over the game. Click-through; hidden when idle.
+- **System tray** — minimize to the tray to keep it out of the way; the tray menu
+  toggles monitoring / auto inputs and restores the window (double-click the icon).
+- **Remembers your setup** — window size, your triggers/buff-groups/auto-inputs, and
+  the record-mouse-moves toggle are restored on the next launch.
 
 ## Install
 
