@@ -30,6 +30,7 @@ from ..models.routine import (
     Routine,
 )
 from ..paths import routines_dir, safe_filename
+from .library_panel import LibraryPanel
 from .routine_step_dialogs import MacroStepDialog, VisionStepDialog, WaitStepDialog
 from .util import intro
 
@@ -69,82 +70,24 @@ class RoutinePanel(QWidget):
         ))
         root.addWidget(splitter)
 
-        self._refresh_library()
+        self._library.refresh()
         self._refresh_steps()
 
     # -- library side --------------------------------------------------------
     def _build_library(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.addWidget(QLabel("<b>Saved routines</b>"))
-        self._library = QListWidget()
-        self._library.itemDoubleClicked.connect(lambda _i: self._library_open())
-        layout.addWidget(self._library, 1)
+        self._library = LibraryPanel(
+            "Saved routines",
+            directory=routines_dir,
+            name_of=lambda p: Routine.load(p).name,
+            on_open=self._load_routine,
+            on_run=self._open_and_run,
+        )
+        return self._library
 
-        row1 = QHBoxLayout()
-        btn_open = QPushButton("Open")
-        btn_run = QPushButton("Open & Run")
-        btn_open.clicked.connect(self._library_open)
-        btn_run.clicked.connect(self._library_open_and_run)
-        row1.addWidget(btn_open)
-        row1.addWidget(btn_run)
-        layout.addLayout(row1)
-
-        row2 = QHBoxLayout()
-        btn_delete = QPushButton("Delete")
-        btn_refresh = QPushButton("Refresh")
-        btn_delete.clicked.connect(self._library_delete)
-        btn_refresh.clicked.connect(self._refresh_library)
-        row2.addWidget(btn_delete)
-        row2.addWidget(btn_refresh)
-        layout.addLayout(row2)
-        return panel
-
-    def _refresh_library(self) -> None:
-        self._library.clear()
-        for path in sorted(routines_dir().glob("*.json")):
-            try:
-                name = Routine.load(path).name
-            except Exception:  # noqa: BLE001
-                name = path.stem
-            item = QListWidgetItem(name)
-            item.setData(Qt.UserRole, str(path))
-            self._library.addItem(item)
-
-    def _selected_library_path(self) -> Optional[Path]:
-        item = self._library.currentItem()
-        return Path(item.data(Qt.UserRole)) if item else None
-
-    def _library_open(self) -> None:
-        path = self._selected_library_path()
-        if path is not None:
-            self._load_routine(path)
-
-    def _library_open_and_run(self) -> None:
-        path = self._selected_library_path()
-        if path is None:
-            return
+    def _open_and_run(self, path: Path) -> None:
         self._load_routine(path)
         if not self.running:
             self._toggle_run()
-
-    def _library_delete(self) -> None:
-        path = self._selected_library_path()
-        if path is None:
-            return
-        if QMessageBox.question(
-            self, "Delete routine", f"Delete '{path.stem}' from the library?"
-        ) != QMessageBox.Yes:
-            return
-        try:
-            path.unlink()
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(self, "Delete failed", str(exc))
-            return
-        if self._current_path == path:
-            self._current_path = None
-        self._refresh_library()
-        self._status(f"Deleted routine '{path.stem}'")
 
     # -- editor side ---------------------------------------------------------
     def _build_editor(self) -> QWidget:
@@ -264,7 +207,7 @@ class RoutinePanel(QWidget):
         routine = self.current_routine()
         path = routines_dir() / f"{safe_filename(routine.name)}.json"
         self._save_routine_to(path)
-        self._refresh_library()
+        self._library.refresh()
 
     def _save_routine_to(self, path: Path) -> None:
         try:

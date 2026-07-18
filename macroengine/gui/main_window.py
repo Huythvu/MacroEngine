@@ -48,6 +48,7 @@ from ..paths import macros_dir, safe_filename
 from ..vision.monitor import Monitor
 from .auto_input_dialog import AutoInputDialog
 from .buff_group_dialog import BuffGroupDialog
+from .library_panel import LibraryPanel
 from .macro_table import MacroTableModel, MacroTableView
 from .routine_panel import RoutinePanel
 from .trigger_dialog import TriggerDialog
@@ -176,57 +177,29 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(tabs)
 
     def _build_macro_library(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.addWidget(QLabel("<b>Saved macros</b>"))
-        self._macro_library = QListWidget()
-        self._macro_library.itemDoubleClicked.connect(lambda _i: self._macro_lib_open())
-        layout.addWidget(self._macro_library, 1)
+        self._macro_library = LibraryPanel(
+            "Saved macros",
+            directory=macros_dir,
+            name_of=lambda p: Macro.load(p).name,
+            on_open=self._macro_open_path,
+            on_run=self._macro_run_path,
+            extra_actions=[("Save to library", self._macro_lib_save)],
+        )
+        return self._macro_library
 
-        row1 = QHBoxLayout()
-        btn_open = QPushButton("Open")
-        btn_save = QPushButton("Save to library")
-        btn_open.clicked.connect(self._macro_lib_open)
-        btn_save.clicked.connect(self._macro_lib_save)
-        row1.addWidget(btn_open)
-        row1.addWidget(btn_save)
-        layout.addLayout(row1)
-
-        row2 = QHBoxLayout()
-        btn_delete = QPushButton("Delete")
-        btn_refresh = QPushButton("Refresh")
-        btn_delete.clicked.connect(self._macro_lib_delete)
-        btn_refresh.clicked.connect(self._refresh_macro_library)
-        row2.addWidget(btn_delete)
-        row2.addWidget(btn_refresh)
-        layout.addLayout(row2)
-
-        self._refresh_macro_library()
-        return panel
-
-    def _refresh_macro_library(self) -> None:
-        self._macro_library.clear()
-        for path in sorted(macros_dir().glob("*.json")):
-            try:
-                name = Macro.load(path).name
-            except Exception:  # noqa: BLE001
-                name = path.stem
-            item = QListWidgetItem(name or path.stem)
-            item.setData(Qt.UserRole, str(path))
-            self._macro_library.addItem(item)
-
-    def _macro_lib_open(self) -> None:
-        item = self._macro_library.currentItem()
-        if item is None:
-            return
+    def _macro_open_path(self, path: Path) -> None:
         try:
-            self._macro = Macro.load(item.data(Qt.UserRole))
+            self._macro = Macro.load(path)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Open failed", str(exc))
             return
         self._model.set_events(self._macro.events)
         self._loop.setValue(self._macro.loop_count)
         self._set_status(f"Opened macro '{self._macro.name}'")
+
+    def _macro_run_path(self, path: Path) -> None:
+        self._macro_open_path(path)
+        self._toggle_play()
 
     def _macro_lib_save(self) -> None:
         if not self._macro.events:
@@ -243,25 +216,8 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Save failed", str(exc))
             return
-        self._refresh_macro_library()
+        self._macro_library.refresh()
         self._set_status(f"Saved macro '{self._macro.name}' to library")
-
-    def _macro_lib_delete(self) -> None:
-        item = self._macro_library.currentItem()
-        if item is None:
-            return
-        path = Path(item.data(Qt.UserRole))
-        if QMessageBox.question(
-            self, "Delete macro", f"Delete '{path.stem}' from the library?"
-        ) != QMessageBox.Yes:
-            return
-        try:
-            path.unlink()
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(self, "Delete failed", str(exc))
-            return
-        self._refresh_macro_library()
-        self._set_status(f"Deleted macro '{path.stem}'")
 
     def _build_triggers_panel(self) -> QWidget:
         panel = QWidget()
@@ -570,7 +526,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Save failed", str(exc))
             return
-        self._refresh_macro_library()
+        self._macro_library.refresh()
         self._set_status(f"Saved {path}")
 
     def _open_triggers(self) -> None:
