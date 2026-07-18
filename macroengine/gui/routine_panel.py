@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from ..core.routine_runner import RoutineRunner
 from ..models.routine import (
+    STEP_IF_VISION,
     STEP_MACRO,
     STEP_WAIT,
     STEP_WAIT_VISION,
@@ -32,9 +33,16 @@ from ..models.routine import (
 from ..paths import routines_dir, safe_filename
 from .editable_list import EditableListPanel
 from .library_panel import LibraryPanel
-from .routine_step_dialogs import MacroStepDialog, VisionStepDialog, WaitStepDialog
+from .routine_step_dialogs import (
+    IfVisionStepDialog,
+    MacroStepDialog,
+    VisionStepDialog,
+    WaitStepDialog,
+)
 
-_STEP_PREFIX = {STEP_MACRO: "▶", STEP_WAIT: "⏲", STEP_WAIT_VISION: "👁"}
+_STEP_PREFIX = {
+    STEP_MACRO: "▶", STEP_WAIT: "⏲", STEP_WAIT_VISION: "👁", STEP_IF_VISION: "⑂",
+}
 
 
 class _RunnerBridge(QObject):
@@ -119,6 +127,7 @@ class RoutinePanel(QWidget):
                 ("+ Macro…", lambda: self._make_step(MacroStepDialog)),
                 ("+ Wait…", lambda: self._make_step(WaitStepDialog)),
                 ("+ Vision wait…", lambda: self._make_step(VisionStepDialog)),
+                ("+ If…", lambda: self._make_step(IfVisionStepDialog)),
             ],
             on_edit=self._edit_step,
         )
@@ -204,6 +213,7 @@ class RoutinePanel(QWidget):
             STEP_MACRO: MacroStepDialog,
             STEP_WAIT: WaitStepDialog,
             STEP_WAIT_VISION: VisionStepDialog,
+            STEP_IF_VISION: IfVisionStepDialog,
         }.get(step.type)
         if dialog_cls is None:
             return None

@@ -185,8 +185,10 @@ chain them on the **Routine** tab:
 1. Record and save each section as its own macro (e.g. `walk-to-npc.json`,
    `turn-in.json`).
 2. On the **Routine** tab, build the step list top-to-bottom:
-   - **+ Macro…** — play a saved macro file (optionally loop it ×N). Steps reference
-     the *file*, so re-recording a section automatically updates the routine.
+   - **+ Macro…** — play a macro. Either pick a **saved** one (library/file), or
+     choose **Record inline** and record it right there — the recording lives *inside
+     the routine*, so you can build and record a section on the spot. Optionally loop
+     it ×N.
    - **+ Wait…** — pause N seconds (± jitter) before the next step.
    - **+ Vision wait…** — poll a screen region until a condition holds (icon
      present/absent or color ratio — same editor as vision triggers, including
@@ -195,6 +197,10 @@ chain them on the **Routine** tab:
      Tick **Click where the image was found** to left-click the reference once it
      appears — e.g. *wait for the "Accept" button, then click it* — even if the
      button isn't always in the same place.
+   - **+ If…** — a one-shot **decision**: check a vision condition *now* (no waiting),
+     and run one action if it holds and a different action if not, then continue.
+     Each action is *do nothing / press a key / type / click / run a macro* — e.g.
+     *if HP-low icon is present → press potion, else do nothing.*
 3. Reorder with Move Up/Down, untick a step to skip it, set routine **Loops**
    (0 = forever), then **Run routine**. The current step highlights while running;
    `Esc` stops everything instantly.

@@ -12,10 +12,12 @@ import threading
 import time
 from typing import Callable, Optional
 
-from pynput import mouse
+from pynput import keyboard, mouse
 
+from ..models import actions
 from ..models.macro import Macro
 from ..models.routine import (
+    STEP_IF_VISION,
     STEP_MACRO,
     STEP_WAIT,
     STEP_WAIT_VISION,
@@ -24,6 +26,8 @@ from ..models.routine import (
     RoutineStep,
 )
 from ..vision import capture, detector
+from . import keyspec
+from .keys import name_to_button
 from .player import Player
 
 _SLEEP_CHUNK = 0.05
@@ -40,6 +44,7 @@ class RoutineRunner:
         self._on_finished = on_finished
         self._player = Player()
         self._mouse = mouse.Controller()
+        self._kbd = keyboard.Controller()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
@@ -98,13 +103,19 @@ class RoutineRunner:
             return (True, "")
         if step.type == STEP_WAIT_VISION:
             return self._wait_vision(step)
+        if step.type == STEP_IF_VISION:
+            return self._if_vision(step)
         return (True, "")  # unknown step types are ignored
 
     def _run_macro(self, step: RoutineStep) -> tuple:
         try:
-            macro = Macro.load(step.macro_path)
+            if step.inline_macro is not None:
+                macro = Macro.from_dict(step.inline_macro)
+            else:
+                macro = Macro.load(step.macro_path)
         except Exception as exc:  # noqa: BLE001
-            return (False, f"could not load macro '{step.macro_path}': {exc}")
+            src = "recorded macro" if step.inline_macro is not None else f"'{step.macro_path}'"
+            return (False, f"could not load {src}: {exc}")
         if step.loop_override > 0:
             macro.loop_count = step.loop_override
         elif macro.loop_count == 0:
@@ -139,6 +150,38 @@ class RoutineRunner:
                 return (True, "")  # continue anyway (no click — nothing was found)
             self._sleep(VISION_POLL_INTERVAL)
         return (False, "stopped")
+
+    def _if_vision(self, step: RoutineStep) -> tuple:
+        """Check the condition once; run then/else action; continue."""
+        try:
+            image = capture.grab_region(step.region)
+        except Exception as exc:  # noqa: BLE001
+            return (False, f"capture failed: {exc}")
+        met = detector.condition_met(step.to_trigger(), image)
+        action = step.then_action if met else step.else_action
+        self._run_action(action)
+        return (True, "")
+
+    def _run_action(self, action) -> None:
+        """Execute an embedded Action (shared vocabulary)."""
+        if action.kind == actions.PRESS_KEY:
+            keyspec.press_keystroke(self._kbd, action.key)
+        elif action.kind == actions.TYPE_TEXT:
+            keyspec.type_text(self._kbd, action.text)
+        elif action.kind == actions.CLICK_AT:
+            self._mouse.position = (action.x, action.y)
+            button = name_to_button(action.button)
+            self._mouse.press(button)
+            self._mouse.release(button)
+        elif action.kind == actions.RUN_MACRO:
+            if action.macro_path:
+                try:
+                    self._player.play(Macro.load(action.macro_path))
+                    while self._player.running and not self._stop.is_set():
+                        time.sleep(_SLEEP_CHUNK)
+                except Exception:  # noqa: BLE001
+                    pass
+        # actions.NONE / CLICK_MATCH: nothing to do here
 
     def _maybe_click_match(self, step: RoutineStep, image) -> None:
         """After the condition is met, optionally click the found reference —

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .actions import Action
 from .trigger import (
     COND_ABSENT,
     DETECT_TEMPLATE,
@@ -29,6 +30,7 @@ from .trigger import (
 STEP_MACRO = "macro"
 STEP_WAIT = "wait"
 STEP_WAIT_VISION = "wait_vision"
+STEP_IF_VISION = "if_vision"
 
 TIMEOUT_STOP = "stop"          # timeout aborts the whole routine
 TIMEOUT_CONTINUE = "continue"  # timeout falls through to the next step
@@ -46,6 +48,9 @@ class RoutineStep:
     # -- macro step ---------------------------------------------------------
     macro_path: str = ""
     loop_override: int = 0  # 0 = play the macro as saved
+    # A macro recorded directly into this step (Macro.to_dict()); takes priority
+    # over macro_path when present, so a routine can be fully self-contained.
+    inline_macro: Optional[Dict[str, Any]] = None
 
     # -- wait step ----------------------------------------------------------
     wait_s: float = 1.0
@@ -66,6 +71,12 @@ class RoutineStep:
     # reference image was found — e.g. wait for an "Accept" button, then click it.
     click_on_match: bool = False
 
+    # -- if_vision step -----------------------------------------------------
+    # Checked once (no waiting). If the condition holds -> then_action, else
+    # else_action; then the routine continues.
+    then_action: Action = field(default_factory=Action)
+    else_action: Action = field(default_factory=Action)
+
     def to_trigger(self) -> Trigger:
         """Bridge to :class:`Trigger` so the runner and the dialog's Test button
         evaluate vision steps with the exact same detector code path."""
@@ -83,9 +94,17 @@ class RoutineStep:
 
     def describe(self) -> str:
         if self.type == STEP_MACRO:
-            base = Path(self.macro_path).name or "<macro>"
+            if self.inline_macro is not None:
+                n = len(self.inline_macro.get("events", []))
+                base = f"recorded ({n} events)"
+            else:
+                base = Path(self.macro_path).name or "<macro>"
             loops = f" ×{self.loop_override}" if self.loop_override > 0 else ""
             return f"Play {base}{loops}"
+        if self.type == STEP_IF_VISION:
+            what = self.name or f"{self.detection} {self.condition}"
+            return (f"If {what}: then {self.then_action.describe()}; "
+                    f"else {self.else_action.describe()}")
         if self.type == STEP_WAIT:
             jit = f" ±{self.jitter_s:g}s" if self.jitter_s else ""
             return f"Wait {self.wait_s:g}s{jit}"
@@ -108,6 +127,7 @@ class RoutineStep:
             "name": self.name,
             "macro_path": self.macro_path,
             "loop_override": self.loop_override,
+            "inline_macro": self.inline_macro,
             "wait_s": self.wait_s,
             "jitter_s": self.jitter_s,
             "region": list(self.region),
@@ -123,6 +143,8 @@ class RoutineStep:
             "timeout_s": self.timeout_s,
             "on_timeout": self.on_timeout,
             "click_on_match": self.click_on_match,
+            "then_action": self.then_action.to_dict(),
+            "else_action": self.else_action.to_dict(),
         }
 
     @classmethod
@@ -134,6 +156,7 @@ class RoutineStep:
             name=raw.get("name", ""),
             macro_path=raw.get("macro_path", ""),
             loop_override=int(raw.get("loop_override", 0)),
+            inline_macro=raw.get("inline_macro"),
             wait_s=float(raw.get("wait_s", 1.0)),
             jitter_s=float(raw.get("jitter_s", 0.0)),
             region=tuple(raw.get("region", (0, 0, 100, 100))),  # type: ignore[arg-type]
@@ -147,6 +170,8 @@ class RoutineStep:
             timeout_s=float(raw.get("timeout_s", 30.0)),
             on_timeout=raw.get("on_timeout", TIMEOUT_STOP),
             click_on_match=bool(raw.get("click_on_match", False)),
+            then_action=Action.from_dict(raw.get("then_action")),
+            else_action=Action.from_dict(raw.get("else_action")),
         )
 
 
