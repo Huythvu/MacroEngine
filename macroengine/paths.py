@@ -46,5 +46,26 @@ def watchers_file() -> Path:
 
 def safe_filename(name: str) -> str:
     """Turn a routine name into a safe file stem."""
-    keep = "".join(c if (c.isalnum() or c in " -_.") else "_" for c in name).strip()
+    keep = "".join(c if (c.isalnum() or c in " -_.()") else "_" for c in name).strip()
     return keep or "routine"
+
+
+def unique_name(directory: Path, name: str, exclude: Path | None = None) -> str:
+    """Return ``name``, or ``name(1)`` / ``name(2)`` … if a ``*.json`` already
+    exists for it — the same way Windows disambiguates a duplicate file name.
+
+    ``exclude`` is a path to ignore (the file we're re-saving over, so editing an
+    open routine keeps its own name instead of bumping to ``(1)``).
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+
+    def taken(candidate: str) -> bool:
+        path = directory / f"{safe_filename(candidate)}.json"
+        return path.exists() and path != exclude
+
+    if not taken(name):
+        return name
+    i = 1
+    while taken(f"{name}({i})"):
+        i += 1
+    return f"{name}({i})"

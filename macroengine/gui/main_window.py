@@ -44,7 +44,7 @@ from ..models.buff import BuffGroup
 from ..models.macro import Macro
 from ..models.store import load_watchers, save_watchers
 from ..models.trigger import Trigger
-from ..paths import macros_dir, safe_filename, watchers_file
+from ..paths import macros_dir, safe_filename, unique_name, watchers_file
 from ..resources import app_icon_path
 from ..vision.monitor import Monitor
 from .auto_input_dialog import AutoInputDialog
@@ -343,7 +343,7 @@ class MainWindow(QMainWindow):
 
     def _macro_duplicate(self, path: Path) -> None:
         macro = Macro.load(path)
-        macro.name = f"{macro.name} copy"
+        macro.name = unique_name(macros_dir(), f"{macro.name} copy")
         macro.save(macros_dir() / f"{safe_filename(macro.name)}.json")
 
     def _macro_open_path(self, path: Path) -> None:
@@ -368,17 +368,11 @@ class MainWindow(QMainWindow):
         name, ok = QInputDialog.getText(self, "Save macro", "Name:", text=default)
         if not ok or not name.strip():
             return
-        self._macro.name = name.strip()
+        # Auto-number a duplicate name (macro, macro(1), macro(2)…) like Windows,
+        # instead of silently overwriting an existing saved macro.
+        self._macro.name = unique_name(macros_dir(), name.strip())
         self._macro.loop_count = self._loop.value()
         path = macros_dir() / f"{safe_filename(self._macro.name)}.json"
-        if path.exists():
-            if QMessageBox.question(
-                self, "Overwrite macro?",
-                f"A saved macro named '{self._macro.name}' already exists.\n"
-                "Overwrite it?",
-            ) != QMessageBox.Yes:
-                self._set_status("Save cancelled — choose a different name to keep both")
-                return
         try:
             self._macro.save(path)
         except Exception as exc:  # noqa: BLE001

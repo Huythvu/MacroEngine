@@ -25,3 +25,20 @@ def test_safe_filename():
     assert paths.safe_filename("") == "routine"
     assert paths.safe_filename("   ") == "routine"
     assert paths.safe_filename("a*b?c") == "a_b_c"
+
+
+def test_unique_name_increments_on_collision(tmp_path):
+    # First save keeps the name.
+    assert paths.unique_name(tmp_path, "routine") == "routine"
+    (tmp_path / "routine.json").write_text("{}")
+    # Next one bumps to (1), then (2)…
+    assert paths.unique_name(tmp_path, "routine") == "routine(1)"
+    (tmp_path / "routine(1).json").write_text("{}")
+    assert paths.unique_name(tmp_path, "routine") == "routine(2)"
+
+
+def test_unique_name_excludes_own_path(tmp_path):
+    # Re-saving the file we already own keeps its name (no bump).
+    own = tmp_path / "routine.json"
+    own.write_text("{}")
+    assert paths.unique_name(tmp_path, "routine", exclude=own) == "routine"

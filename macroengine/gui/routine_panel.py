@@ -32,7 +32,7 @@ from ..models.routine import (
     Routine,
     RoutineStep,
 )
-from ..paths import macros_dir, routines_dir, safe_filename
+from ..paths import macros_dir, routines_dir, safe_filename, unique_name
 from .editable_list import EditableListPanel
 from .library_panel import LibraryPanel
 from .routine_step_dialogs import (
@@ -114,7 +114,7 @@ class RoutinePanel(QWidget):
 
     def _routine_duplicate(self, path: Path) -> None:
         routine = Routine.load(path)
-        routine.name = f"{routine.name} copy"
+        routine.name = unique_name(routines_dir(), f"{routine.name} copy")
         routine.save(routines_dir() / f"{safe_filename(routine.name)}.json")
 
     def _open_and_run(self, path: Path) -> None:
@@ -223,7 +223,7 @@ class RoutinePanel(QWidget):
         if not ok or not name.strip():
             self._status("Recording discarded")
             return
-        macro.name = name.strip()
+        macro.name = unique_name(macros_dir(), name.strip())
         path = macros_dir() / f"{safe_filename(macro.name)}.json"
         try:
             macro.save(path)
@@ -299,17 +299,14 @@ class RoutinePanel(QWidget):
 
     def _save_to_library(self) -> None:
         routine = self.current_routine()
-        path = routines_dir() / f"{safe_filename(routine.name)}.json"
-        # Guard against silently clobbering a different saved routine that
-        # happens to share this name. Re-saving the one we opened is fine.
-        if path.exists() and path != self._current_path:
-            if QMessageBox.question(
-                self, "Overwrite routine?",
-                f"A saved routine named '{routine.name}' already exists.\n"
-                "Overwrite it?",
-            ) != QMessageBox.Yes:
-                self._status("Save cancelled — rename the routine to keep both")
-                return
+        # Don't clobber a different saved routine that shares this name: pick a
+        # unique name (routine, routine(1), routine(2)…) like Windows does.
+        # Re-saving the routine we opened keeps its own name.
+        name = unique_name(routines_dir(), routine.name, exclude=self._current_path)
+        if name != routine.name:
+            routine.name = name
+            self._name.setText(name)
+        path = routines_dir() / f"{safe_filename(name)}.json"
         self._save_routine_to(path)
         self._library.refresh()
 

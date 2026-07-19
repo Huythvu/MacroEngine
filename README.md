@@ -28,9 +28,10 @@ red, press the potion key."*
   reads as a short list. It's display-only — deleting/reordering a collapsed row acts
   on the whole run, and playback is byte-for-byte identical. Untick it to see every
   individual event.
-- **Save / load** macros and trigger sets as JSON. Saving over an existing name in a
-  library asks before overwriting, so you don't clobber a saved macro/routine by
-  reusing its name.
+- **Save / load** macros and trigger sets as JSON. Saving a new macro/routine whose
+  name is already taken is auto-numbered like Windows — `routine`, `routine(1)`,
+  `routine(2)` — so you never clobber a saved file by reusing its name. (Re-saving a
+  routine you opened keeps its own name.)
 - **Right-click anything in a list** — triggers, buff groups, saved macros, saved
   routines and routine steps all share a context menu: **Edit / Rename / Duplicate /
   Remove**. Rename and Duplicate work in place; Duplicate makes a `… copy`.
