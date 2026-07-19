@@ -20,7 +20,7 @@ red, press the potion key."*
   throttled and can be turned off so keyboard-only macros stay clean.
 - **Playback with looping** — replay a macro N times, or `0` = loop forever until you
   hit the panic key.
-- **Editable timeline** — a table of every event: delete, reorder (move up/down),
+- **Editable timeline** — a table of every event: delete, drag to reorder,
   insert key taps / clicks, and edit each event's delay inline.
 - **Compact view toggle** — a held key becomes hundreds of repeated events and mouse
   motion becomes thousands of samples. Tick **Compact view** to collapse each run of
@@ -28,7 +28,12 @@ red, press the potion key."*
   reads as a short list. It's display-only — deleting/reordering a collapsed row acts
   on the whole run, and playback is byte-for-byte identical. Untick it to see every
   individual event.
-- **Save / load** macros and trigger sets as JSON.
+- **Save / load** macros and trigger sets as JSON. Saving over an existing name in a
+  library asks before overwriting, so you don't clobber a saved macro/routine by
+  reusing its name.
+- **Right-click anything in a list** — triggers, buff groups, saved macros, saved
+  routines and routine steps all share a context menu: **Edit / Rename / Duplicate /
+  Remove**. Rename and Duplicate work in place; Duplicate makes a `… copy`.
 - **Vision triggers** — watch a screen region and fire an action:
   - **Template match** — snapshot a reference image (e.g. a buff icon); fire when it
     is **present** or **absent** (absent = "buff ran out").

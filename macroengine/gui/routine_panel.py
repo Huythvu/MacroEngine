@@ -96,8 +96,26 @@ class RoutinePanel(QWidget):
             name_of=lambda p: Routine.load(p).name,
             on_open=self._load_routine,
             on_run=self._open_and_run,
+            on_rename=self._routine_rename,
+            on_duplicate=self._routine_duplicate,
         )
         return self._library
+
+    def _routine_rename(self, path: Path, new_name: str) -> None:
+        routine = Routine.load(path)
+        routine.name = new_name
+        new_path = routines_dir() / f"{safe_filename(new_name)}.json"
+        routine.save(new_path)
+        if new_path != path:
+            path.unlink(missing_ok=True)
+        if self._current_path == path:
+            self._current_path = new_path
+            self._name.setText(new_name)
+
+    def _routine_duplicate(self, path: Path) -> None:
+        routine = Routine.load(path)
+        routine.name = f"{routine.name} copy"
+        routine.save(routines_dir() / f"{safe_filename(routine.name)}.json")
 
     def _open_and_run(self, path: Path) -> None:
         self._load_routine(path)
@@ -282,6 +300,16 @@ class RoutinePanel(QWidget):
     def _save_to_library(self) -> None:
         routine = self.current_routine()
         path = routines_dir() / f"{safe_filename(routine.name)}.json"
+        # Guard against silently clobbering a different saved routine that
+        # happens to share this name. Re-saving the one we opened is fine.
+        if path.exists() and path != self._current_path:
+            if QMessageBox.question(
+                self, "Overwrite routine?",
+                f"A saved routine named '{routine.name}' already exists.\n"
+                "Overwrite it?",
+            ) != QMessageBox.Yes:
+                self._status("Save cancelled — rename the routine to keep both")
+                return
         self._save_routine_to(path)
         self._library.refresh()
 

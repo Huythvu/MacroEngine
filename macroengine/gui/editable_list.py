@@ -11,11 +11,15 @@ from __future__ import annotations
 
 from typing import Callable, List, Optional, Tuple
 
+import copy
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QInputDialog,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -47,6 +51,9 @@ class EditableListPanel(QWidget):
         self._list = QListWidget()
         self._list.setMinimumWidth(120)
         self._list.itemChanged.connect(self._check_changed)
+        self._list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._context_menu)
+        self._list.itemDoubleClicked.connect(lambda _i: self._edit())
         if reorderable:
             # Reorder by dragging rows; mirror the move into the backing list.
             self._list.setDragDropMode(QAbstractItemView.InternalMove)
@@ -130,6 +137,50 @@ class EditableListPanel(QWidget):
         if 0 <= row < len(self._items):
             del self._items[row]
             self._changed()
+
+    # -- context menu --------------------------------------------------------
+    def _context_menu(self, pos) -> None:
+        item = self._list.itemAt(pos)
+        if item is None:
+            return
+        self._list.setCurrentRow(self._list.row(item))
+        menu = QMenu(self)
+        menu.addAction("Edit…", self._edit)
+        if hasattr(self._items[self._list.currentRow()], "name"):
+            menu.addAction("Rename…", self._rename)
+        menu.addAction("Duplicate", self._duplicate)
+        menu.addSeparator()
+        menu.addAction("Remove", self._remove)
+        menu.exec(self._list.mapToGlobal(pos))
+
+    def _rename(self) -> None:
+        row = self._list.currentRow()
+        if not (0 <= row < len(self._items)):
+            return
+        item = self._items[row]
+        current = getattr(item, "name", "")
+        new_name, ok = QInputDialog.getText(self, "Rename", "New name:", text=current)
+        if not ok:
+            return
+        item.name = new_name.strip()
+        self._changed()
+        self._list.setCurrentRow(row)
+
+    def _duplicate(self) -> None:
+        row = self._list.currentRow()
+        if not (0 <= row < len(self._items)):
+            return
+        original = self._items[row]
+        # Prefer the model's own serialization for a clean deep copy.
+        if hasattr(original, "to_dict") and hasattr(type(original), "from_dict"):
+            clone = type(original).from_dict(original.to_dict())
+        else:
+            clone = copy.deepcopy(original)
+        if hasattr(clone, "name") and clone.name:
+            clone.name = f"{clone.name} copy"
+        self._items.insert(row + 1, clone)
+        self._changed()
+        self._list.setCurrentRow(row + 1)
 
     def _rows_moved(self, _parent, start: int, end: int, _dest, dest_row: int) -> None:
         # Qt has already moved the QListWidget rows; replay the same move on the

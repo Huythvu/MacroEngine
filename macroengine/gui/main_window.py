@@ -327,9 +327,24 @@ class MainWindow(QMainWindow):
             name_of=lambda p: Macro.load(p).name,
             on_open=self._macro_open_path,
             on_run=self._macro_run_path,
+            on_rename=self._macro_rename,
+            on_duplicate=self._macro_duplicate,
             extra_actions=[("Save…", self._macro_lib_save)],
         )
         return self._macro_library
+
+    def _macro_rename(self, path: Path, new_name: str) -> None:
+        macro = Macro.load(path)
+        macro.name = new_name
+        new_path = macros_dir() / f"{safe_filename(new_name)}.json"
+        macro.save(new_path)
+        if new_path != path:
+            path.unlink(missing_ok=True)
+
+    def _macro_duplicate(self, path: Path) -> None:
+        macro = Macro.load(path)
+        macro.name = f"{macro.name} copy"
+        macro.save(macros_dir() / f"{safe_filename(macro.name)}.json")
 
     def _macro_open_path(self, path: Path) -> None:
         try:
@@ -355,8 +370,17 @@ class MainWindow(QMainWindow):
             return
         self._macro.name = name.strip()
         self._macro.loop_count = self._loop.value()
+        path = macros_dir() / f"{safe_filename(self._macro.name)}.json"
+        if path.exists():
+            if QMessageBox.question(
+                self, "Overwrite macro?",
+                f"A saved macro named '{self._macro.name}' already exists.\n"
+                "Overwrite it?",
+            ) != QMessageBox.Yes:
+                self._set_status("Save cancelled — choose a different name to keep both")
+                return
         try:
-            self._macro.save(macros_dir() / f"{safe_filename(self._macro.name)}.json")
+            self._macro.save(path)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Save failed", str(exc))
             return
@@ -373,6 +397,9 @@ class MainWindow(QMainWindow):
         self._trigger_list = QListWidget()
         self._trigger_list.setMinimumWidth(120)
         self._trigger_list.itemChanged.connect(self._watcher_check_changed)
+        self._trigger_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._trigger_list.customContextMenuRequested.connect(self._trigger_context_menu)
+        self._trigger_list.itemDoubleClicked.connect(lambda _i: self._edit_selected())
         w_layout.addWidget(self._trigger_list, 1)
 
         btns = FlowLayout(spacing=4)
@@ -617,12 +644,14 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             self._triggers.append(dlg.get_trigger())
             self._refresh_triggers()
+            self._save_session()
 
     def _add_group(self) -> None:
         dlg = BuffGroupDialog(parent=self)
         if dlg.exec():
             self._groups.append(dlg.get_group())
             self._refresh_triggers()
+            self._save_session()
 
     def _edit_selected(self) -> None:
         row = self._trigger_list.currentRow()
@@ -638,6 +667,7 @@ class MainWindow(QMainWindow):
             if dlg.exec():
                 self._groups[self._groups.index(obj)] = dlg.get_group()
         self._refresh_triggers()
+        self._save_session()
 
     def _remove_selected(self) -> None:
         row = self._trigger_list.currentRow()
@@ -646,6 +676,45 @@ class MainWindow(QMainWindow):
         kind, obj = self._rows[row]
         (self._triggers if kind == "trigger" else self._groups).remove(obj)
         self._refresh_triggers()
+        self._save_session()
+
+    def _trigger_context_menu(self, pos) -> None:
+        item = self._trigger_list.itemAt(pos)
+        if item is None:
+            return
+        self._trigger_list.setCurrentRow(self._trigger_list.row(item))
+        menu = QMenu(self)
+        menu.addAction("Edit…", self._edit_selected)
+        menu.addAction("Rename…", self._rename_selected)
+        menu.addAction("Duplicate", self._duplicate_selected)
+        menu.addSeparator()
+        menu.addAction("Remove", self._remove_selected)
+        menu.exec(self._trigger_list.mapToGlobal(pos))
+
+    def _rename_selected(self) -> None:
+        row = self._trigger_list.currentRow()
+        if row < 0 or row >= len(self._rows):
+            return
+        _kind, obj = self._rows[row]
+        new_name, ok = QInputDialog.getText(self, "Rename", "New name:", text=obj.name)
+        if not ok or not new_name.strip():
+            return
+        obj.name = new_name.strip()
+        self._refresh_triggers()
+        self._trigger_list.setCurrentRow(row)
+        self._save_session()
+
+    def _duplicate_selected(self) -> None:
+        row = self._trigger_list.currentRow()
+        if row < 0 or row >= len(self._rows):
+            return
+        kind, obj = self._rows[row]
+        clone = type(obj).from_dict(obj.to_dict())
+        clone.name = f"{clone.name} copy"
+        target = self._triggers if kind == "trigger" else self._groups
+        target.insert(target.index(obj) + 1, clone)
+        self._refresh_triggers()
+        self._save_session()
 
     def _toggle_monitor(self) -> None:
         if self._monitor and self._monitor.running:
