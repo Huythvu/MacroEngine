@@ -45,13 +45,11 @@ class LibraryPanel(QWidget):
         layout.addWidget(QLabel(f"<b>{title}</b>"))
         self._list = QListWidget()
         self._list.setMinimumWidth(120)
-        self._list.itemDoubleClicked.connect(lambda _i: self._open())
+        # Clicking an item opens it right away — no separate Open step.
+        self._list.itemClicked.connect(lambda _i: self._open())
         layout.addWidget(self._list, 1)
 
         buttons = FlowLayout(spacing=4)
-        btn_open = QPushButton("Open")
-        btn_open.clicked.connect(self._open)
-        buttons.addWidget(btn_open)
         if on_run is not None:
             btn_run = QPushButton("Run")
             btn_run.setToolTip("Open the selected item and run it")

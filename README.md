@@ -135,11 +135,11 @@ manually: `python tools/make_icon.py assets/icon_source.png`. See `assets/README
 3. Click **Play** (or `F10`) to replay. `Esc` stops immediately.
 4. Edit rows in the table — delete/reorder, edit a delay inline, **Add Key Tap…**, or
    **Add Click (pick on screen)…** which lets you *click where you want the macro to
-   click* instead of typing coordinates. Select rows and **Copy** (`Ctrl+C`) to copy
-   them — as readable text for any editor, and pasteable back in with **Paste**
-   (`Ctrl+V`) to duplicate steps.
+   click* instead of typing coordinates. **Drag rows to reorder** them. `Ctrl+C` /
+   `Ctrl+X` / `Ctrl+V` copy, cut and paste selected rows — copies are readable text
+   in any editor and paste back in to duplicate steps.
 5. **Save to library** — saved macros appear in the **Saved macros** list on the left
-   (stored in your per-user macros folder) and can be opened with a double-click.
+   (stored in your per-user macros folder); a single click opens one.
    They also show up in the routine **+ Macro…** step picker, so recorded sections
    plug straight into routines. **Macro ▸ Save As…** still works for arbitrary paths.
 
@@ -201,12 +201,15 @@ chain them on the **Routine** tab:
      and run one action if it holds and a different action if not, then continue.
      Each action is *do nothing / press a key / type / click / run a macro* — e.g.
      *if HP-low icon is present → press potion, else do nothing.*
-3. Reorder with Move Up/Down, untick a step to skip it, set routine **Loops**
-   (0 = forever), then **Run routine**. The current step highlights while running;
+3. **Drag steps to reorder**, untick a step to skip it, set routine **Loops**
+   (0 = forever), then **▶ Play**. **⏺ Record step** records a new macro section
+   right here — on stop it's named, saved to the macro library, and appended as a
+   step (perfect when a section only makes sense between vision checks). The
+   current step highlights while running;
    `Esc` stops everything instantly.
 4. **Save to library** — the routine is stored in your per-user routines folder and
    shown in the **Saved routines** list on the left. Select one and **Open** (or
-   double-click) to load it, or **Open & Run** to launch it in one click. **Routine ▸
+   single click loads it, or **Run** launches it in one click. **Routine ▸
    Save As… / Open…** still lets you use arbitrary file locations.
 
 Hover a tab to see a tooltip describing what it's for. Your triggers, buff groups and

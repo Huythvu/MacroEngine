@@ -31,6 +31,8 @@ from .region_selector import PointPicker
 _COLUMNS = ["#", "Type", "Details", "Delay (s)"]
 # Clipboard format for pasting events back into the app (round-trips full data).
 _EVENTS_MIME = "application/x-macroengine-events"
+# Internal drag format for reordering rows.
+_ROWS_MIME = "application/x-macroengine-rows"
 
 
 class MacroTableModel(QAbstractTableModel):
@@ -98,7 +100,9 @@ class MacroTableModel(QAbstractTableModel):
         return None
 
     def flags(self, index):
-        base = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        if not index.isValid():
+            return Qt.ItemIsDropEnabled  # allow drops between rows / at the end
+        base = Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled
         # Delay is editable only for single-event rows (a group's delay is a total).
         if index.column() == 3 and self._groups[index.row()][1] == 1:
             return base | Qt.ItemIsEditable
@@ -129,19 +133,55 @@ class MacroTableModel(QAbstractTableModel):
         self._rebuild()
         self.endResetModel()
 
-    def move_row(self, row: int, delta: int) -> int:
-        target = row + delta
-        if not (0 <= row < len(self._groups)) or not (0 <= target < len(self._groups)):
-            return row
-        a, b = (row, target) if row < target else (target, row)
-        (sa, la), (sb, lb) = self._groups[a], self._groups[b]  # adjacent, so sb == sa + la
+    # -- drag & drop reordering ---------------------------------------------
+    def supportedDropActions(self):
+        return Qt.MoveAction
+
+    def mimeTypes(self):
+        return [_ROWS_MIME]
+
+    def mimeData(self, indexes):
+        rows = sorted({i.row() for i in indexes if i.isValid()})
+        md = QMimeData()
+        md.setData(_ROWS_MIME, json.dumps(rows).encode("utf-8"))
+        return md
+
+    def dropMimeData(self, data, action, row, column, parent) -> bool:
+        if action != Qt.MoveAction or not data.hasFormat(_ROWS_MIME):
+            return False
+        try:
+            rows = json.loads(bytes(data.data(_ROWS_MIME)).decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return False
+        target = row if row >= 0 else (parent.row() if parent.isValid() else len(self._groups))
+        self.move_display_rows(rows, target)
+        # The whole move happened here; the view's follow-up removeRows is a
+        # no-op (QAbstractTableModel's default returns False), so no double-delete.
+        return True
+
+    def move_display_rows(self, rows: List[int], target_row: int) -> None:
+        """Move the given display rows (whole groups) so they start at
+        ``target_row``'s position; events are moved as spans."""
+        spans = [self._groups[r] for r in sorted(set(rows)) if 0 <= r < len(self._groups)]
+        if not spans:
+            return
+        if target_row >= len(self._groups):
+            tgt = len(self._events)
+        else:
+            tgt = self._groups[max(0, target_row)][0]
         self.beginResetModel()
-        block_a = self._events[sa:sa + la]
-        block_b = self._events[sb:sb + lb]
-        self._events[sa:sb + lb] = block_b + block_a
+        moved: List[Event] = []
+        for start, length in sorted(spans, reverse=True):
+            moved[0:0] = self._events[start:start + length]
+            del self._events[start:start + length]
+            if start + length <= tgt:
+                tgt -= length
+            elif start < tgt:
+                tgt = start  # target sat inside a moved span — clamp to its start
+        tgt = max(0, min(tgt, len(self._events)))
+        self._events[tgt:tgt] = moved
         self._rebuild()
         self.endResetModel()
-        return target
 
     def insert_events(self, at_row: int, events: List[Event]) -> None:
         if 0 <= at_row < len(self._groups):
@@ -172,23 +212,24 @@ class MacroTableView(QWidget):
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.horizontalHeader().setStretchLastSection(False)
         self._table.setColumnWidth(2, 320)
+        # Reorder rows by dragging them (whole groups move together).
+        self._table.setDragDropMode(QAbstractItemView.InternalMove)
+        self._table.setDefaultDropAction(Qt.MoveAction)
+        self._table.setDragDropOverwriteMode(False)
+        self._table.setDropIndicatorShown(True)
+        self._table.setToolTip("Drag rows to reorder — Ctrl+C / Ctrl+X / Ctrl+V work here")
 
         btn_delete = QPushButton("Delete")
-        btn_up = QPushButton("↑")
-        btn_down = QPushButton("↓")
         btn_key = QPushButton("Add Key…")
         btn_click = QPushButton("Add Click…")
-        btn_up.setToolTip("Move selected row up")
-        btn_down.setToolTip("Move selected row down")
         btn_click.setToolTip("Insert a click — pick the position on screen")
         btn_delete.clicked.connect(self._delete)
-        btn_up.clicked.connect(lambda: self._move(-1))
-        btn_down.clicked.connect(lambda: self._move(1))
         btn_key.clicked.connect(self._add_key)
         btn_click.clicked.connect(self._add_click)
 
-        # Clipboard is Ctrl+C / Ctrl+V (no dedicated buttons needed).
+        # Clipboard is Ctrl+C / Ctrl+X / Ctrl+V (no dedicated buttons needed).
         QShortcut(QKeySequence.Copy, self._table, activated=self._copy)
+        QShortcut(QKeySequence.Cut, self._table, activated=self._cut)
         QShortcut(QKeySequence.Paste, self._table, activated=self._paste)
 
         self._compact = QCheckBox("Compact")
@@ -200,7 +241,7 @@ class MacroTableView(QWidget):
         self._compact.toggled.connect(model.set_compact)
 
         buttons = FlowLayout(spacing=4)
-        for b in (btn_delete, btn_up, btn_down, btn_key, btn_click, self._compact):
+        for b in (btn_delete, btn_key, btn_click, self._compact):
             buttons.addWidget(b)
 
         layout = QVBoxLayout(self)
@@ -225,6 +266,13 @@ class MacroTableView(QWidget):
         md.setText("\n".join(f"{e.describe()}\t{e.delay:.3f}s" for e in events))
         QGuiApplication.clipboard().setMimeData(md)
 
+    def _cut(self) -> None:
+        rows = self._selected_rows()
+        if not rows:
+            return
+        self._copy()
+        self._model.delete_rows(rows)
+
     def _paste(self) -> None:
         md = QGuiApplication.clipboard().mimeData()
         if not md.hasFormat(_EVENTS_MIME):
@@ -241,13 +289,6 @@ class MacroTableView(QWidget):
 
     def _delete(self) -> None:
         self._model.delete_rows(self._selected_rows())
-
-    def _move(self, delta: int) -> None:
-        rows = self._selected_rows()
-        if len(rows) != 1:
-            return
-        new_row = self._model.move_row(rows[0], delta)
-        self._table.selectRow(new_row)
 
     def _add_key(self) -> None:
         key, ok = QInputDialog.getText(self, "Add Key Tap", "Key (e.g. a, 1, Key.enter):")

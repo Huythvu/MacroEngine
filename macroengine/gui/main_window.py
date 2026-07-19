@@ -284,7 +284,11 @@ class MainWindow(QMainWindow):
         recorder_layout.addWidget(recorder_split)
 
         # Routine composer tab (chains saved macros with waits + vision checks).
-        self._routine_panel = RoutinePanel(status_cb=self._set_status)
+        self._routine_panel = RoutinePanel(
+            status_cb=self._set_status,
+            recorder_factory=self._make_recorder,
+            on_macro_saved=lambda: self._macro_library.refresh(),
+        )
 
         # Watchers & auto inputs tab.
         watchers_tab = self._build_triggers_panel()
@@ -469,6 +473,16 @@ class MainWindow(QMainWindow):
             self._start_countdown(cd, lambda: self._begin_record(from_button), self._btn_record)
             return
         self._begin_record(from_button)
+
+    def _make_recorder(self) -> Optional[Recorder]:
+        """Configured Recorder for inline recording (e.g. from the Routine tab).
+        Returns None while the Recorder tab is already recording."""
+        if self._recorder and self._recorder.running:
+            return None
+        return Recorder(
+            record_mouse_move=self._record_moves.isChecked(),
+            ignored_keys=event_names_for(*self._hotkey_specs()),
+        )
 
     def _begin_record(self, from_button: bool) -> None:
         self._record_started_from_button = from_button

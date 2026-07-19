@@ -1,9 +1,10 @@
-"""A reusable checkable list with Add / Edit / Remove (and optional reordering).
+"""A reusable checkable list with Add / Edit / Remove and drag-to-reorder.
 
 Drives the routine-steps list, the buff-items list, and the auto-inputs list —
 each previously hand-rolled the same plumbing. Operates on a live ``items`` list
 (mutated in place); every item is expected to have an ``enabled`` attribute, which
-the row checkbox toggles.
+the row checkbox toggles. Reordering is drag-and-drop (Qt InternalMove), mirrored
+back into the backing list.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from typing import Callable, List, Optional, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -45,6 +47,13 @@ class EditableListPanel(QWidget):
         self._list = QListWidget()
         self._list.setMinimumWidth(120)
         self._list.itemChanged.connect(self._check_changed)
+        if reorderable:
+            # Reorder by dragging rows; mirror the move into the backing list.
+            self._list.setDragDropMode(QAbstractItemView.InternalMove)
+            self._list.setDefaultDropAction(Qt.MoveAction)
+            self._list.setDragDropOverwriteMode(False)
+            self._list.model().rowsMoved.connect(self._rows_moved)
+            self._list.setToolTip("Drag rows to reorder")
 
         buttons = FlowLayout(spacing=4)
         for label, factory in add_buttons:
@@ -57,15 +66,6 @@ class EditableListPanel(QWidget):
         btn_remove.clicked.connect(self._remove)
         buttons.addWidget(btn_edit)
         buttons.addWidget(btn_remove)
-        if reorderable:
-            btn_up = QPushButton("↑")
-            btn_down = QPushButton("↓")
-            btn_up.setToolTip("Move selected up")
-            btn_down.setToolTip("Move selected down")
-            btn_up.clicked.connect(lambda: self._move(-1))
-            btn_down.clicked.connect(lambda: self._move(1))
-            buttons.addWidget(btn_up)
-            buttons.addWidget(btn_down)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -131,11 +131,14 @@ class EditableListPanel(QWidget):
             del self._items[row]
             self._changed()
 
-    def _move(self, delta: int) -> None:
-        row = self._list.currentRow()
-        target = row + delta
-        if not (0 <= row < len(self._items)) or not (0 <= target < len(self._items)):
-            return
-        self._items[row], self._items[target] = self._items[target], self._items[row]
-        self._changed()
-        self._list.setCurrentRow(target)
+    def _rows_moved(self, _parent, start: int, end: int, _dest, dest_row: int) -> None:
+        # Qt has already moved the QListWidget rows; replay the same move on the
+        # backing list so model and view stay in lockstep.
+        count = end - start + 1
+        moved = self._items[start:start + count]
+        del self._items[start:start + count]
+        insert_at = dest_row if dest_row < start else dest_row - count
+        insert_at = max(0, min(insert_at, len(self._items)))
+        self._items[insert_at:insert_at] = moved
+        if self._on_changed is not None:
+            self._on_changed()
