@@ -78,7 +78,10 @@ Work even when the game has focus (defaults — rebindable in **Options ▸ Sett
   to the game first (hotkey starts stay instant), and toggle the status overlay.
 - **Activity log** — a timestamped dock at the bottom shows what's happening (fires
   with match info, playback start/stop, routine steps, and errors that used to be
-  silent). Also written to `<appdata>/MacroEngine/macroengine.log`.
+  silent). Also written to `<appdata>/MacroEngine/macroengine.log`. Drag it anywhere,
+  close it, and reopen it any time from **View ▸ Activity log**.
+- **View menu** — toggle the activity log and the Recorder's **Saved macros** side
+  panel closed or open (they stay draggable). Both remember their state between runs.
 - **Status overlay** — a small always-on-top badge row (REC / PLAY / MON / AUTO) so
   you can see the app's state over the game. Click-through; hidden when idle.
 - **System tray** — minimize to the tray to keep it out of the way; the tray menu

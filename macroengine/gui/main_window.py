@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QCheckBox,
     QDockWidget,
@@ -111,6 +111,7 @@ class MainWindow(QMainWindow):
         self._bridge.hotkey_panic.connect(self._panic)
 
         self._build_ui()
+        self._apply_saved_panels()
         self._build_menu()
         self._restore_geometry()
 
@@ -310,12 +311,13 @@ class MainWindow(QMainWindow):
         )
         self.setCentralWidget(tabs)
 
-        # Activity log dock (visible across all tabs).
+        # Activity log dock (visible across all tabs). Kept on self so the View
+        # menu can toggle it back open after it's closed.
         self._log = LogPanel()
-        dock = QDockWidget("Activity log", self)
-        dock.setWidget(self._log)
-        dock.setObjectName("activity_log")
-        self.addDockWidget(Qt.BottomDockWidgetArea, dock)
+        self._log_dock = QDockWidget("Activity log", self)
+        self._log_dock.setWidget(self._log)
+        self._log_dock.setObjectName("activity_log")
+        self.addDockWidget(Qt.BottomDockWidgetArea, self._log_dock)
 
     def _append_log(self, text: str) -> None:
         self._log.append_line(text)
@@ -453,8 +455,28 @@ class MainWindow(QMainWindow):
         t = self.menuBar().addMenu("&Watchers")
         t.addAction("Import…", self._open_triggers)
         t.addAction("Export…", self._save_triggers)
+
+        # View menu: toggle the side panel and the activity log back open. Both
+        # panels stay draggable — this just closes/reopens them.
+        v = self.menuBar().addMenu("&View")
+        self._act_library = QAction("Saved macros panel", self, checkable=True)
+        self._act_library.setChecked(bool(self._settings.get("show_library", True)))
+        self._act_library.toggled.connect(self._toggle_library_panel)
+        v.addAction(self._act_library)
+        self._act_log = self._log_dock.toggleViewAction()
+        self._act_log.setText("Activity log")
+        v.addAction(self._act_log)
+
         o = self.menuBar().addMenu("&Options")
         o.addAction("Settings…", self._open_settings)
+
+    def _toggle_library_panel(self, visible: bool) -> None:
+        self._macro_library.setVisible(visible)
+
+    def _apply_saved_panels(self) -> None:
+        """Restore the last session's panel visibility before menus are built."""
+        self._macro_library.setVisible(bool(self._settings.get("show_library", True)))
+        self._log_dock.setVisible(bool(self._settings.get("show_activity_log", True)))
 
     def _open_settings(self) -> None:
         from .settings_dialog import SettingsDialog
@@ -871,4 +893,9 @@ class MainWindow(QMainWindow):
         geo = self.geometry()
         self._settings["window"] = [geo.x(), geo.y(), geo.width(), geo.height()]
         self._settings["record_mouse_moves"] = self._record_moves.isChecked()
+        # Use the menu actions' checked state, not isVisible(): when the window
+        # is hidden to the tray, isVisible() is False for every child regardless
+        # of whether the user actually closed the panel.
+        self._settings["show_library"] = self._act_library.isChecked()
+        self._settings["show_activity_log"] = self._act_log.isChecked()
         save_settings(self._settings)

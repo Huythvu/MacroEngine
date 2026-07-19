@@ -19,6 +19,8 @@ DEFAULTS: Dict[str, Any] = {
     "overlay_enabled": True,   # show the on-screen status overlay
     "record_mouse_moves": True,
     "window": None,            # [x, y, w, h] or None
+    "show_library": True,      # Recorder's "Saved macros" side panel visible
+    "show_activity_log": True, # Activity log dock visible
 }
 
 
